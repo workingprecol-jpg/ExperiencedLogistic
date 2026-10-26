@@ -1,0 +1,3206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador WMS 3D - Gemelo Digital de Bodega y Cumplimiento Aduanero</title>
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --surface-dark: rgba(17, 24, 39, 0.85);
+            --surface-card: rgba(30, 41, 59, 0.75);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --accent-purple: #8b5cf6;
+            --status-disponible: #10b981;
+            --status-retenido: #f59e0b;
+            --status-cuarentena: #ef4444;
+            --status-reservado: #8b5cf6;
+            --status-agotado: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text-primary);
+        }
+
+        #webgl-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            outline: none;
+        }
+
+        /* Top Header */
+        .top-navbar {
+            position: absolute;
+            top: 16px;
+            left: 20px;
+            right: 20px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: var(--surface-dark);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            z-index: 10;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #2563eb, #06b6d4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+        }
+
+        .brand-icon svg {
+            width: 22px;
+            height: 22px;
+            fill: none;
+            stroke: #fff;
+            stroke-width: 2;
+        }
+
+        .brand-text h1 {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge-live {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: var(--accent-emerald);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .badge-live::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--accent-emerald);
+            animation: pulse-dot 1.8s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .brand-text p {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* KPI Quick Counters in Header */
+        .header-kpi-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .kpi-chip {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 6px 14px;
+            display: flex;
+            flex-direction: column;
+            min-width: 90px;
+        }
+
+        .kpi-chip .kpi-label {
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .kpi-chip .kpi-value {
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+        }
+
+        .kpi-chip.disponible .kpi-value { color: var(--status-disponible); }
+        .kpi-chip.retenido .kpi-value { color: var(--status-retenido); }
+        .kpi-chip.cuarentena .kpi-value { color: var(--status-cuarentena); }
+
+        /* Camera & Mode Switcher */
+        .camera-controls-bar {
+            position: absolute;
+            top: 92px;
+            left: 20px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+            background: var(--surface-dark);
+            backdrop-filter: blur(14px);
+            padding: 6px;
+            border-radius: 12px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .cam-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .cam-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .cam-btn.active {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            color: #fff;
+            box-shadow: 0 0 14px rgba(59, 130, 246, 0.4);
+        }
+
+        .cam-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke-width: 2;
+        }
+
+        /* Zone Quick-Navigator */
+        .zone-pill-nav {
+            position: absolute;
+            top: 92px;
+            right: 20px;
+            display: flex;
+            gap: 6px;
+            z-index: 10;
+            background: var(--surface-dark);
+            backdrop-filter: blur(14px);
+            padding: 6px;
+            border-radius: 12px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .zone-pill {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .zone-pill:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .zone-pill.active {
+            background: rgba(6, 182, 212, 0.2);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        /* Floating 3D Tooltip / Inspector Card (Right side) */
+        .wms-inspector-card {
+            position: absolute;
+            top: 154px;
+            right: 20px;
+            width: 380px;
+            max-height: calc(100vh - 180px);
+            overflow-y: auto;
+            background: var(--surface-dark);
+            backdrop-filter: blur(18px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 18px;
+            z-index: 10;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s;
+        }
+
+        .wms-inspector-card::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .wms-inspector-card::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+
+        .wms-inspector-card.collapsed {
+            transform: translateX(410px);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .inspector-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            border-bottom: 1px solid var(--border-glass);
+            padding-bottom: 10px;
+        }
+
+        .inspector-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .close-inspector-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 6px;
+        }
+
+        .close-inspector-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .location-code-badge {
+            background: rgba(37, 99, 235, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            color: #60a5fa;
+            text-align: center;
+            margin-bottom: 14px;
+            letter-spacing: 0.05em;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .info-cell {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            padding: 8px 10px;
+        }
+
+        .info-cell .cell-label {
+            font-size: 9px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .info-cell .cell-value {
+            font-size: 12px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+            margin-top: 2px;
+        }
+
+        .status-pill-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .status-DISPONIBLE { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .status-RETENIDO_ADUANA { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+        .status-CUARENTENA { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+        .status-RESERVADO { background: rgba(139, 92, 246, 0.2); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.4); }
+
+        .inspector-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .action-subbtn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .action-subbtn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .action-subbtn.release-btn {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(6, 182, 212, 0.25));
+            border-color: rgba(16, 185, 129, 0.4);
+            color: #34d399;
+        }
+
+        .action-subbtn.release-btn:hover {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.4), rgba(6, 182, 212, 0.4));
+        }
+
+        /* Bottom Control Panel & Operational Actions */
+        .bottom-dock {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--surface-dark);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glass);
+            border-radius: 18px;
+            padding: 8px 16px;
+            z-index: 10;
+            box-shadow: 0 10px 36px rgba(0, 0, 0, 0.6);
+        }
+
+        .dock-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            color: #f1f5f9;
+            padding: 9px 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .dock-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .dock-btn:active {
+            transform: translateY(0);
+        }
+
+        .dock-btn.drone-btn {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: #fff;
+            box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+        }
+
+        .dock-btn.customs-btn {
+            background: linear-gradient(135deg, #d97706, #f59e0b);
+            color: #fff;
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
+        }
+
+        .dock-btn.wave-btn {
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            color: #fff;
+            box-shadow: 0 0 16px rgba(37, 99, 235, 0.35);
+        }
+
+        .dock-btn.discrepancy-btn {
+            background: linear-gradient(135deg, #be123c, #f43f5e);
+            color: #fff;
+        }
+
+        .dock-divider {
+            width: 1px;
+            height: 28px;
+            background: var(--border-glass);
+        }
+
+        /* Bottom-Left Live Terminal / WMS Event Feed */
+        .wms-terminal-card {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 390px;
+            height: 200px;
+            background: var(--surface-dark);
+            backdrop-filter: blur(14px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 14px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            border-bottom: 1px solid var(--border-glass);
+            padding-bottom: 6px;
+        }
+
+        .terminal-header span {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .terminal-body {
+            flex: 1;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            line-height: 1.6;
+            color: #cbd5e1;
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        .terminal-body::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .terminal-body::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }
+
+        .log-entry {
+            margin-bottom: 3px;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            margin-right: 6px;
+        }
+
+        .tag-wms { color: #60a5fa; }
+        .tag-gts { color: #fbbf24; }
+        .tag-rfid { color: #c084fc; }
+        .tag-yolo { color: #34d399; }
+        .tag-alert { color: #f87171; }
+
+        /* Drone YOLO HUD Overlay */
+        .drone-hud-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+            display: none;
+        }
+
+        .drone-hud-overlay.active {
+            display: block;
+        }
+
+        .hud-crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 80px;
+            height: 80px;
+            transform: translate(-50%, -50%);
+            border: 2px dashed rgba(16, 185, 129, 0.7);
+            border-radius: 12px;
+        }
+
+        .hud-yolo-box {
+            position: absolute;
+            top: 45%;
+            left: 46%;
+            width: 110px;
+            height: 85px;
+            border: 2px solid #10b981;
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .hud-yolo-tag {
+            position: absolute;
+            top: -20px;
+            left: -2px;
+            background: #10b981;
+            color: #0b0f19;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+        }
+
+        .hud-telemetry {
+            position: absolute;
+            top: 100px;
+            left: 30px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #10b981;
+            text-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+            line-height: 1.8;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 12px 18px;
+            border-radius: 10px;
+            border-left: 3px solid #10b981;
+        }
+
+        /* 3D In-Scene Overlays (Zone Label Pins) */
+        .zone-pin-3d {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            pointer-events: none;
+            z-index: 4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            opacity: 0.9;
+            transition: opacity 0.2s;
+        }
+
+        .pin-pill {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            white-space: nowrap;
+        }
+
+        .pin-pill .pin-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+        }
+
+        .pin-pill.res { border-color: var(--accent-amber); }
+        .pin-pill.res .pin-dot { background: var(--accent-amber); }
+
+        .pin-pill.qua { border-color: var(--accent-rose); }
+        .pin-pill.qua .pin-dot { background: var(--accent-rose); }
+
+        .pin-pill.fst { border-color: #eab308; }
+        .pin-pill.fst .pin-dot { background: #eab308; }
+
+        .pin-pill.rec { border-color: var(--accent-blue); }
+        .pin-pill.rec .pin-dot { background: var(--accent-blue); }
+
+        .pin-pill.pac { border-color: var(--accent-purple); }
+        .pin-pill.pac .pin-dot { background: var(--accent-purple); }
+
+        .pin-pill.exp { border-color: var(--accent-emerald); }
+        .pin-pill.exp .pin-dot { background: var(--accent-emerald); }
+
+        .pin-pill.fuel { border-color: #ef4444; }
+        .pin-pill.fuel .pin-dot { background: #ef4444; }
+
+        .pin-pill.conv { border-color: #06b6d4; }
+        .pin-pill.conv .pin-dot { background: #06b6d4; }
+
+        .pin-pill.psb { border-color: #f59e0b; }
+        .pin-pill.psb .pin-dot { background: #f59e0b; }
+
+        .pin-stem {
+            width: 2px;
+            height: 16px;
+            background: linear-gradient(to bottom, var(--accent-cyan), transparent);
+        }
+
+        .pin-pill.res + .pin-stem { background: linear-gradient(to bottom, var(--accent-amber), transparent); }
+        .pin-pill.qua + .pin-stem { background: linear-gradient(to bottom, var(--accent-rose), transparent); }
+        .pin-pill.rec + .pin-stem { background: linear-gradient(to bottom, var(--accent-blue), transparent); }
+        .pin-pill.pac + .pin-stem { background: linear-gradient(to bottom, var(--accent-purple), transparent); }
+        .pin-pill.exp + .pin-stem { background: linear-gradient(to bottom, var(--accent-emerald), transparent); }
+        .pin-pill.fuel + .pin-stem { background: linear-gradient(to bottom, #ef4444, transparent); }
+        .pin-pill.conv + .pin-stem { background: linear-gradient(to bottom, #06b6d4, transparent); }
+        .pin-pill.psb + .pin-stem { background: linear-gradient(to bottom, #f59e0b, transparent); }
+
+        .char-pin-3d {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            pointer-events: none;
+            z-index: 4;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #f8fafc;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .char-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #38bdf8;
+            box-shadow: 0 0 6px #38bdf8;
+        }
+
+        /* Help Modal */
+        .modal-backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-backdrop.show { display: flex; }
+
+        .modal-box {
+            background: #111827;
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            width: 720px;
+            max-width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 28px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+        }
+
+        .modal-box h2 {
+            font-size: 20px;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 14px;
+        }
+
+        .modal-box p {
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .skills-summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 18px 0;
+        }
+
+        .skill-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .skill-card h4 {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            margin-bottom: 6px;
+        }
+
+        .skill-card p {
+            font-size: 12px;
+            margin: 0;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D WebGL Canvas -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- Top Navigation Header -->
+    <header class="top-navbar">
+        <div class="brand-section">
+            <div class="brand-icon">
+                <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            </div>
+            <div class="brand-text">
+                <h1>SIMULADOR WMS 3D <span class="badge-live">GEMELO DIGITAL ACTIVO</span></h1>
+                <p>Cumplimiento Aduanero (GTS) • Auditoría RFID UHF • Visión Dron IA</p>
+            </div>
+        </div>
+
+        <!-- Global Inventory KPIs in Header -->
+        <div class="header-kpi-group">
+            <div class="kpi-chip disponible">
+                <span class="kpi-label">Disponible</span>
+                <span class="kpi-value" id="kpi-disponible">36 Pallets</span>
+            </div>
+            <div class="kpi-chip retenido">
+                <span class="kpi-label">Ret. Aduana</span>
+                <span class="kpi-value" id="kpi-retenido">12 Pallets</span>
+            </div>
+            <div class="kpi-chip cuarentena">
+                <span class="kpi-label">Cuarentena</span>
+                <span class="kpi-value" id="kpi-cuarentena">3 Pallets</span>
+            </div>
+            <div class="kpi-chip">
+                <span class="kpi-label">Métrica Ruta</span>
+                <span class="kpi-value" id="kpi-distancia">Manhattan</span>
+            </div>
+            <button class="dock-btn" onclick="toggleHelpModal(true)" style="padding: 7px 12px; margin-left: 6px;">
+                <svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                Info
+            </button>
+        </div>
+    </header>
+
+    <!-- Camera Mode Switcher -->
+    <div class="camera-controls-bar">
+        <button class="cam-btn active" id="btn-cam-iso" onclick="setCameraMode('iso')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            2D Isométrica
+        </button>
+        <button class="cam-btn" id="btn-cam-free" onclick="setCameraMode('free')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"></circle><path d="m4.93 4.93 4.24 4.24"></path><path d="m14.83 9.17 4.24-4.24"></path><path d="m14.83 14.83 4.24 4.24"></path><path d="m9.17 14.83-4.24 4.24"></path></svg>
+            3D Libre (Orbital)
+        </button>
+        <button class="cam-btn" id="btn-cam-top" onclick="setCameraMode('top')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M2 12h20"></path></svg>
+            Planta Cenital (2D)
+        </button>
+        <button class="cam-btn" id="btn-cam-drone" onclick="setCameraMode('drone')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            POV Dron IA (YOLO)
+        </button>
+    </div>
+
+    <!-- Quick Zone Focus Navigator -->
+    <div class="zone-pill-nav" style="flex-wrap: wrap; max-width: 680px; justify-content: flex-end;">
+        <button class="zone-pill active" onclick="focusZone('ALL')">Ver Todo</button>
+        <button class="zone-pill" onclick="focusZone('REC')">REC Entrada</button>
+        <button class="zone-pill" onclick="focusZone('RES')">RES Aduana</button>
+        <button class="zone-pill" onclick="focusZone('FUEL')">⛽ Gasolinera</button>
+        <button class="zone-pill" onclick="focusZone('ESTIBA')">📦 Zonas Estiba</button>
+        <button class="zone-pill" onclick="focusZone('CONV')">⚙️ Cinta Transportadora</button>
+        <button class="zone-pill" onclick="focusZone('PSA')">Pas. A (Aduana)</button>
+        <button class="zone-pill" onclick="focusZone('PSB')">Pas. B (Construc.)</button>
+        <button class="zone-pill" onclick="focusZone('PSC')">Pas. C (High Racks)</button>
+        <button class="zone-pill" onclick="focusZone('PSD')">Pas. D (Golden)</button>
+        <button class="zone-pill" onclick="focusZone('PSE')">Pas. E (Conveyor)</button>
+        <button class="zone-pill" onclick="focusZone('QUA')">QUA Cuarentena</button>
+        <button class="zone-pill" onclick="focusZone('PAC')">PAC Empaque</button>
+        <button class="zone-pill" onclick="focusZone('EXP')">EXP Despacho</button>
+    </div>
+
+    <!-- Right Side WMS Location Inspector -->
+    <div class="wms-inspector-card" id="inspector-card">
+        <div class="inspector-header">
+            <div class="inspector-title">
+                <svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                Ficha Técnica de Ubicación & Producto
+            </div>
+            <button class="close-inspector-btn" onclick="closeInspector()">✕</button>
+        </div>
+
+        <div class="location-code-badge" id="insp-code">NMP-PSA-R02-N02-P01</div>
+
+        <!-- Product Highlight Card -->
+        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;">
+            <div style="font-size: 9px; font-weight: 700; color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 0.05em;" id="insp-prod-cat">MATERIALES DE CONSTRUCCIÓN</div>
+            <div style="font-size: 13px; font-weight: 800; color: #fff; margin-top: 3px;" id="insp-prod-name">Cemento Portland Gris (50 kg)</div>
+        </div>
+
+        <div style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:11px; color:var(--text-muted); font-weight:600;">ESTADO FSM:</span>
+            <span class="status-pill-badge status-DISPONIBLE" id="insp-fsm">DISPONIBLE</span>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-cell">
+                <div class="cell-label">Zona / Región</div>
+                <div class="cell-value" id="insp-zone">Almacén Principal</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Pasillo / Rack</div>
+                <div class="cell-value" id="insp-aisle-rack">Pasillo A • R01</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Nivel de Rack</div>
+                <div class="cell-value" id="insp-level">Nivel 02 (Golden)</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Coordenadas (X,Y,Z)</div>
+                <div class="cell-value" id="insp-coords">[12.0, 8.5, 2.2]</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">SKU / LPN</div>
+                <div class="cell-value" id="insp-sku">SKU-CEM-50KG</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Lote / Caducidad</div>
+                <div class="cell-value" id="insp-lote">LOT-2026-X8 • 12/2028</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Peso Pallet</div>
+                <div class="cell-value" id="insp-weight">1,200 kg</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Volumen Estimado</div>
+                <div class="cell-value" id="insp-vol">1.44 m³</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Stock en Bodega</div>
+                <div class="cell-value" id="insp-stock">48 / 48 u.</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Pedimento / DUA</div>
+                <div class="cell-value" id="insp-pedimento">PED-2026-0819</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Antena RFID UHF</div>
+                <div class="cell-value" id="insp-rfid">Circular (75°)</div>
+            </div>
+            <div class="info-cell">
+                <div class="cell-label">Dist. Manhattan</div>
+                <div class="cell-value" id="insp-dist">28.4 m (Eucl: 21m)</div>
+            </div>
+        </div>
+
+        <div class="inspector-actions">
+            <button class="action-subbtn release-btn" id="btn-inspect-release" onclick="executeCustomsReleaseSelected()">
+                🏛️ Autorizar Levante Aduanero GTS
+            </button>
+            <button class="action-subbtn" onclick="sendSelectedToQuarantine()">
+                ⚠️ Enviar a Cuarentena (QUA)
+            </button>
+            <button class="action-subbtn" onclick="routePickerToSelected()">
+                🚶 Trazar Ruta de Picking (Manhattan)
+            </button>
+        </div>
+    </div>
+
+    <!-- Bottom Left Realtime Terminal / WMS Event Feed -->
+    <div class="wms-terminal-card">
+        <div class="terminal-header">
+            <span>
+                <svg style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                Registro de Eventos y Trazabilidad WMS
+            </span>
+            <span style="color:var(--accent-emerald); font-size:9px;">AUDIT TRAIL 4 AÑOS</span>
+        </div>
+        <div class="terminal-body" id="terminal-body">
+            <!-- Dynamic logs inserted here -->
+        </div>
+    </div>
+
+    <!-- Bottom Central Simulation Dock -->
+    <div class="bottom-dock">
+        <button class="dock-btn drone-btn" onclick="triggerDroneAudit()">
+            <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            Auditoría Dron IA (YOLO)
+        </button>
+
+        <button class="dock-btn customs-btn" onclick="triggerBatchCustomsRelease()">
+            <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 10v11M19 10v11M9 10v11M14 10v11M2 10l10-7 10 7"></path></svg>
+            Levante Aduanero GTS
+        </button>
+
+        <button class="dock-btn wave-btn" onclick="triggerPickingWave()">
+            <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+            Ola de Picking (Golden Zone)
+        </button>
+
+        <button class="dock-btn discrepancy-btn" onclick="injectDiscrepancy()">
+            <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            Inyectar Discrepancia
+        </button>
+
+        <div class="dock-divider"></div>
+
+        <button class="dock-btn" id="btn-rfid-beams" onclick="toggleRfidBeams()">
+            <svg style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+            Haces RFID UHF
+        </button>
+
+        <button class="dock-btn" id="btn-pause-play" onclick="toggleSimulationPause()">
+            <svg style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;" id="pause-icon" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            Pausar
+        </button>
+    </div>
+
+    <!-- Drone POV HUD Elements -->
+    <div class="drone-hud-overlay" id="drone-hud">
+        <div class="hud-crosshair"></div>
+        <div class="hud-yolo-box">
+            <div class="hud-yolo-tag">YOLO v8: PALLET (0.97)</div>
+        </div>
+        <div class="hud-telemetry">
+            <div><strong>AEROSCAN AI-4 TELEMETRÍA</strong></div>
+            <div>ALTITUD (Z): <span id="hud-alt">4.80 m</span></div>
+            <div>PASILLO (Y): <span id="hud-pos-y">14.2 m</span></div>
+            <div>LECTURA DOBLE: [RACK QR + LPN RFID]</div>
+            <div>RSSI MEDIO: <span id="hud-rssi">-64 dBm (Fase Estática)</span></div>
+            <div>VELOCIDAD: 1.8 m/s • AUTONOMÍA: 88%</div>
+        </div>
+    </div>
+
+    <!-- 3D Overlay Labels on Top of Canvas -->
+    <div id="labels-container"></div>
+
+    <!-- Help / Documentation Modal -->
+    <div class="modal-backdrop" id="help-modal" onclick="if(event.target === this) toggleHelpModal(false)">
+        <div class="modal-box">
+            <h2>Arquitectura del Simulador WMS 3D</h2>
+            <p>Este simulador tridimensional integra de manera estricta la especificación técnica de los tres documentos de arquitectura del almacén:</p>
+
+            <div class="skills-summary-grid">
+                <div class="skill-card">
+                    <h4>1. wms-location-architect</h4>
+                    <p>• Codificación jerárquica: <code>ZONA-PASILLO-RACK-NIVEL-POSICION</code>.<br>
+                    • Cálculo de distancias Manhattan (operadores en pasillos ortogonales) vs. Euclidiana (vuelo libre de dron).<br>
+                    • Golden Zone ergonómica (Niveles 02 y 03 para Clase A).</p>
+                </div>
+                <div class="skill-card">
+                    <h4>2. bonded-warehouse-compliance</h4>
+                    <p>• Autómata de Estados Finitos: <code>RETENIDO_ADUANA</code>, <code>DISPONIBLE</code>, <code>CUARENTENA</code>, <code>RESERVADO</code>, <code>AGOTADO</code>.<br>
+                    • Regla estricta: Disponibilidad = 0 en Zona Restringida hasta liberación GTS.<br>
+                    • Historial inalterable de auditoría aduanera.</p>
+                </div>
+                <div class="skill-card">
+                    <h4>3. automated-inventory-audit</h4>
+                    <p>• Antenas UHF Haz Estrecho (30°, Polarización Lineal) para $Z \ge 6$m.<br>
+                    • Antenas Cono Amplio (75°, Polarización Circular) para $Z < 6$m.<br>
+                    • Dron con inferencia de Visión Computacional (YOLO) para auditorías continuas sin detener operaciones.</p>
+                </div>
+                <div class="skill-card">
+                    <h4>4. Personajes Operativos en 3D</h4>
+                    <p>• <strong>Carlos</strong>: Recepción en Muelle (ASN).<br>
+                    • <strong>Dra. Elena</strong>: Inspectora Aduanera en Zona Restringida.<br>
+                    • <strong>Miguel</strong>: Operador de Montacargas de gran elevación.<br>
+                    • <strong>Mateo</strong>: Picker de Pasillo en Golden Zone.<br>
+                    • <strong>Sofía</strong>: Supervisora de Calidad en Cuarentena.<br>
+                    • <strong>Andrés</strong>: Consolidación y Despacho en Packing.</p>
+                </div>
+            </div>
+
+            <p style="font-size:12px; color:var(--text-muted);">
+                💡 <strong>Consejo de Interacción:</strong> Haz clic sobre cualquier pallet o estantería en 3D para inspeccionar sus atributos WMS, liberar mercancía retenida o trazar rutas Manhattan en tiempo real.
+            </p>
+
+            <div style="text-align: right; margin-top: 20px;">
+                <button class="dock-btn wave-btn" onclick="toggleHelpModal(false)" style="margin-left:auto;">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        /* ==========================================================================
+           WMS DATA MODEL, FSM & STATE ENGINE
+           ========================================================================== */
+        const FSM_STATES = {
+            RETENIDO_ADUANA: 'RETENIDO_ADUANA',
+            DISPONIBLE: 'DISPONIBLE',
+            CUARENTENA: 'CUARENTENA',
+            RESERVADO: 'RESERVADO',
+            AGOTADO: 'AGOTADO'
+        };
+
+        const ZONES = {
+            REC: { code: 'REC', name: 'Muelle de Recepción', color: 0x3b82f6, restricted: false },
+            RES: { code: 'RES', name: 'Zona Restringida Aduanera', color: 0xf59e0b, restricted: true },
+            NMP: { code: 'NMP', name: 'Almacén Nacional Principal', color: 0x06b6d4, restricted: false },
+            FST: { code: 'FST', name: 'Zona Alta Rotación (Golden)', color: 0xeab308, restricted: false },
+            QUA: { code: 'QUA', name: 'Área de Cuarentena e Inspección', color: 0xef4444, restricted: false },
+            PAC: { code: 'PAC', name: 'Consolidación y Empaque', color: 0x8b5cf6, restricted: false },
+            EXP: { code: 'EXP', name: 'Muelle de Despacho', color: 0x10b981, restricted: false }
+        };
+
+        // Complete warehouse inventory database
+        const inventoryDatabase = [];
+        let selectedLocation = null;
+        let showRfidBeams = true;
+        let isSimulationPaused = false;
+        let activeCameraMode = 'iso'; // 'iso', 'free', 'top', 'drone'
+
+        /* ==========================================================================
+           THREE.JS SCENE SETUP & ISOMETRIC 2D CAMERA SYSTEM
+           ========================================================================== */
+        const canvas = document.getElementById('webgl-canvas');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0c111d);
+        scene.fog = new THREE.FogExp2(0x0c111d, 0.007);
+
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        // Orthographic Camera (True Isometric 2D projection)
+        const frustumSize = 48;
+        const aspect = width / height;
+        const orthoCamera = new THREE.OrthographicCamera(
+            (frustumSize * aspect) / -2,
+            (frustumSize * aspect) / 2,
+            frustumSize / 2,
+            frustumSize / -2,
+            -100,
+            500
+        );
+        // Pure isometric angle (45° azimuth, 35.264° elevation: X = Y = Z distance)
+        const isoDistance = 75;
+        orthoCamera.position.set(isoDistance, isoDistance, isoDistance);
+        orthoCamera.lookAt(0, 2, 0);
+
+        // Perspective Camera (Free 3D inspection)
+        const perspCamera = new THREE.PerspectiveCamera(45, aspect, 0.5, 400);
+        perspCamera.position.set(55, 45, 55);
+        perspCamera.lookAt(0, 0, 0);
+
+        // Drone Camera (First-person POV)
+        const droneCamera = new THREE.PerspectiveCamera(70, aspect, 0.1, 200);
+
+        let activeCamera = orthoCamera;
+
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.15;
+
+        // OrbitControls
+        const controls = new THREE.OrbitControls(perspCamera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+        controls.minDistance = 15;
+        controls.maxDistance = 150;
+
+        // Controls for Orthographic camera pan & zoom
+        const orthoControls = new THREE.OrbitControls(orthoCamera, renderer.domElement);
+        orthoControls.enableDamping = true;
+        orthoControls.dampingFactor = 0.05;
+        orthoControls.enableRotate = false; // Keep true isometric orientation!
+        orthoControls.screenSpacePanning = true;
+
+        /* ==========================================================================
+           LIGHTING & INDUSTRIAL ENVIRONMENT
+           ========================================================================== */
+        const ambientLight = new THREE.AmbientLight(0xd1d5db, 0.55);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfffbeb, 0.85);
+        sunLight.position.set(45, 70, 35);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 10;
+        sunLight.shadow.camera.far = 160;
+        const d = 45;
+        sunLight.shadow.camera.left = -d;
+        sunLight.shadow.camera.right = d;
+        sunLight.shadow.camera.top = d;
+        sunLight.shadow.camera.bottom = -d;
+        sunLight.shadow.bias = -0.0005;
+        scene.add(sunLight);
+
+        // Warehouse Interior High-bay LED point lights
+        const warehouseBayLights = [
+            { x: -18, y: 14, z: -10, color: 0x93c5fd, intensity: 0.6 },
+            { x: 0,   y: 14, z: -10, color: 0xbae6fd, intensity: 0.7 },
+            { x: 18,  y: 14, z: -10, color: 0x93c5fd, intensity: 0.6 },
+            { x: -18, y: 14, z: 10,  color: 0x93c5fd, intensity: 0.6 },
+            { x: 0,   y: 14, z: 10,  color: 0xfef08a, intensity: 0.7 }, // Golden zone highlight
+            { x: 18,  y: 14, z: 10,  color: 0xfde047, intensity: 0.6 }
+        ];
+
+        warehouseBayLights.forEach(l => {
+            const light = new THREE.PointLight(l.color, l.intensity, 28, 1.8);
+            light.position.set(l.x, l.y, l.z);
+            scene.add(light);
+            // Visual LED fixture mesh
+            const fixtureGeo = new THREE.CylinderGeometry(0.5, 0.7, 0.2, 16);
+            const fixtureMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
+            const fixture = new THREE.Mesh(fixtureGeo, fixtureMat);
+            fixture.position.set(l.x, l.y + 0.1, l.z);
+            scene.add(fixture);
+        });
+
+        /* ==========================================================================
+           WAREHOUSE FLOOR & ZONE DELIMITATIONS
+           ========================================================================== */
+        // Floor with industrial grid texture
+        function createIndustrialFloor() {
+            const canvasFloor = document.createElement('canvas');
+            canvasFloor.width = 1024;
+            canvasFloor.height = 1024;
+            const ctx = canvasFloor.getContext('2d');
+
+            // Concrete gray base
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            // Subtle floor tiles
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 2;
+            const tileSize = 64;
+            for (let x = 0; x <= 1024; x += tileSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, 1024);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= 1024; y += tileSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(1024, y);
+                ctx.stroke();
+            }
+
+            const floorTexture = new THREE.CanvasTexture(canvasFloor);
+            floorTexture.wrapS = THREE.RepeatWrapping;
+            floorTexture.wrapT = THREE.RepeatWrapping;
+            floorTexture.repeat.set(6, 6);
+
+            const floorGeo = new THREE.PlaneGeometry(76, 56);
+            const floorMat = new THREE.MeshStandardMaterial({
+                map: floorTexture,
+                roughness: 0.65,
+                metalness: 0.1
+            });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Building Perimeter Baseboard Walls
+            createPerimeterWalls();
+        }
+
+        function createPerimeterWalls() {
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+            const wallGeoH = new THREE.BoxGeometry(76, 2.5, 0.6);
+            const wallGeoV = new THREE.BoxGeometry(0.6, 2.5, 56);
+
+            const wallN = new THREE.Mesh(wallGeoH, wallMat);
+            wallN.position.set(0, 1.25, -28);
+            scene.add(wallN);
+
+            const wallS = new THREE.Mesh(wallGeoH, wallMat);
+            wallS.position.set(0, 1.25, 28);
+            scene.add(wallS);
+
+            const wallW = new THREE.Mesh(wallGeoV, wallMat);
+            wallW.position.set(-38, 1.25, 0);
+            scene.add(wallW);
+
+            const wallE = new THREE.Mesh(wallGeoV, wallMat);
+            wallE.position.set(38, 1.25, 0);
+            scene.add(wallE);
+
+            // Warehouse structural columns
+            const colGeo = new THREE.BoxGeometry(0.8, 14, 0.8);
+            const colMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
+            const colPositions = [
+                [-25, -15], [0, -15], [25, -15],
+                [-25, 15],  [0, 15],  [25, 15]
+            ];
+            colPositions.forEach(([cx, cz]) => {
+                const col = new THREE.Mesh(colGeo, colMat);
+                col.position.set(cx, 7, cz);
+                col.castShadow = true;
+                scene.add(col);
+            });
+        }
+
+        // Zone Floor Demarcations (Painted lines, striped zebra zones)
+        function createZoneMarkings() {
+            // Function to create painted floor rectangle
+            function addFloorMarking(x, z, w, h, borderColor, fillColor = null) {
+                const group = new THREE.Group();
+                const lineThickness = 0.2;
+                const borderMat = new THREE.MeshBasicMaterial({ color: borderColor });
+
+                // Border top & bottom
+                const bH = new THREE.Mesh(new THREE.PlaneGeometry(w, lineThickness), borderMat);
+                bH.rotation.x = -Math.PI / 2;
+                bH.position.set(x, 0.015, z - h / 2);
+                group.add(bH);
+
+                const bB = bH.clone();
+                bB.position.z = z + h / 2;
+                group.add(bB);
+
+                // Border left & right
+                const bV = new THREE.Mesh(new THREE.PlaneGeometry(lineThickness, h), borderMat);
+                bV.rotation.x = -Math.PI / 2;
+                bV.position.set(x - w / 2, 0.015, z);
+                group.add(bV);
+
+                const bR = bV.clone();
+                bR.position.x = x + w / 2;
+                group.add(bR);
+
+                if (fillColor) {
+                    const fill = new THREE.Mesh(new THREE.PlaneGeometry(w - lineThickness, h - lineThickness),
+                        new THREE.MeshBasicMaterial({ color: fillColor, transparent: true, opacity: 0.15 }));
+                    fill.rotation.x = -Math.PI / 2;
+                    fill.position.set(x, 0.012, z);
+                    group.add(fill);
+                }
+                scene.add(group);
+            }
+
+            // 1. REC - Muelle de Recepción (Inbound Dock) -> Left Side
+            addFloorMarking(-29, -14, 14, 18, 0x3b82f6, 0x2563eb);
+
+            // 2. RES - Depósito Aduanero Restringido (Bonded Warehouse) -> North Center
+            addFloorMarking(-9, -15, 20, 16, 0xf59e0b, 0xd97706);
+            createEnhancedRestrictedArea(-9, -15, 20, 16);
+
+            // 3. NMP - Almacén Nacional Principal (Racks Centrales) -> Center
+            addFloorMarking(14, -14, 20, 18, 0x06b6d4, 0x0891b2);
+
+            // 4. FST - Golden Zone / Alta Rotación (Pasillos Frontales) -> South Central
+            addFloorMarking(14, 11, 20, 16, 0xeab308, 0xca8a04);
+
+            // 5. QUA - Cuarentena e Inspección -> South West
+            addFloorMarking(-9, 11, 16, 16, 0xef4444, 0xdc2626);
+
+            // 6. PAC - Consolidación y Packing -> South East
+            addFloorMarking(29, 0, 12, 16, 0x8b5cf6, 0x7c3aed);
+
+            // 7. EXP - Muelle de Despacho (Outbound Dock) -> Far Left Bottom
+            addFloorMarking(-29, 11, 14, 16, 0x10b981, 0x059669);
+
+            // Pedestrian crosswalks / transit lines (Safety yellow zebra strips)
+            createCrosswalk(-20, 0, 4, 14);
+            createCrosswalk(2, 0, 4, 14);
+
+            // New Infrastructure & Systems
+            createFloorStagingBays();
+            createAisleOverheadSigns();
+            createFuelStation(-30, 0, -1.5);
+            createConveyorSystem();
+        }
+
+        function createCrosswalk(x, z, w, l) {
+            const group = new THREE.Group();
+            const stripes = 6;
+            const stripeMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+            for (let i = 0; i < stripes; i++) {
+                const stripe = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.6), stripeMat);
+                stripe.rotation.x = -Math.PI / 2;
+                stripe.position.set(x, 0.016, z - l / 2 + (i * l) / (stripes - 1));
+                group.add(stripe);
+            }
+            scene.add(group);
+        }
+
+        /* ==========================================================================
+           ESPECIFICACIÓN DEL ÁREA RESTRINGIDA ADUANERA (RES) & CASETA DE CONTROL
+           ========================================================================== */
+        function createEnhancedRestrictedArea(cx, cz, w, h) {
+            const resGroup = new THREE.Group();
+            const postGeo = new THREE.CylinderGeometry(0.08, 0.08, 3.2, 8);
+            const postMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.8, roughness: 0.3 });
+            const fenceMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, wireframe: true, transparent: true, opacity: 0.42 });
+
+            const halfW = w / 2;
+            const halfH = h / 2;
+            const posts = [
+                [cx - halfW, cz - halfH], [cx + halfW, cz - halfH],
+                [cx - halfW, cz + halfH], [cx + halfW, cz + halfH],
+                [cx, cz - halfH], [cx - halfW, cz], [cx + halfW, cz]
+            ];
+
+            posts.forEach(([px, pz]) => {
+                const p = new THREE.Mesh(postGeo, postMat);
+                p.position.set(px, 1.6, pz);
+                resGroup.add(p);
+            });
+
+            // Wire mesh panels
+            const panelN = new THREE.Mesh(new THREE.PlaneGeometry(w, 2.8), fenceMat);
+            panelN.position.set(cx, 1.6, cz - halfH);
+            resGroup.add(panelN);
+
+            const panelW = new THREE.Mesh(new THREE.PlaneGeometry(h, 2.8), fenceMat);
+            panelW.rotation.y = Math.PI / 2;
+            panelW.position.set(cx - halfW, 1.6, cz);
+            resGroup.add(panelW);
+
+            const panelE = new THREE.Mesh(new THREE.PlaneGeometry(h, 2.8), fenceMat);
+            panelE.rotation.y = -Math.PI / 2;
+            panelE.position.set(cx + halfW, 1.6, cz);
+            resGroup.add(panelE);
+
+            // South side gate
+            const gateWidth = 4.5;
+            const leftL = (w - gateWidth) / 2;
+            const panelS1 = new THREE.Mesh(new THREE.PlaneGeometry(leftL, 2.8), fenceMat);
+            panelS1.position.set(cx - halfW + leftL / 2, 1.6, cz + halfH);
+            resGroup.add(panelS1);
+
+            const panelS2 = new THREE.Mesh(new THREE.PlaneGeometry(leftL, 2.8), fenceMat);
+            panelS2.position.set(cx + halfW - leftL / 2, 1.6, cz + halfH);
+            resGroup.add(panelS2);
+
+            // Warning sign above gate
+            const signGeo = new THREE.BoxGeometry(5.2, 0.65, 0.1);
+            const signMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3 });
+            const sign = new THREE.Mesh(signGeo, signMat);
+            sign.position.set(cx, 3.2, cz + halfH);
+            resGroup.add(sign);
+
+            // RFID Portal Arch with twin antennas at gate
+            const portalArchGeo = new THREE.BoxGeometry(0.2, 3.2, 0.3);
+            const portalMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6 });
+            const archL = new THREE.Mesh(portalArchGeo, portalMat);
+            archL.position.set(cx - gateWidth / 2, 1.6, cz + halfH);
+            const archR = new THREE.Mesh(portalArchGeo, portalMat);
+            archR.position.set(cx + gateWidth / 2, 1.6, cz + halfH);
+            resGroup.add(archL);
+            resGroup.add(archR);
+
+            // Customs Guard & Compliance Booth (Caseta de Control Aduanero)
+            const boothMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.5, roughness: 0.1 });
+            const boothRoofMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 });
+
+            const boothBody = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.7, 2.4), boothMat);
+            boothBody.position.set(cx + halfW - 2.0, 1.35, cz + halfH + 1.4);
+            boothBody.castShadow = true;
+            resGroup.add(boothBody);
+
+            const windowMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.1, 0.1), glassMat);
+            windowMesh.position.set(cx + halfW - 2.0, 1.6, cz + halfH + 0.18);
+            resGroup.add(windowMesh);
+
+            const boothRoof = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.2, 2.8), boothRoofMat);
+            boothRoof.position.set(cx + halfW - 2.0, 2.75, cz + halfH + 1.4);
+            resGroup.add(boothRoof);
+
+            // Security turnstile with RFID Badge Reader
+            const turnstileMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.85 });
+            const turnstile = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 1.1, 16), turnstileMat);
+            turnstile.position.set(cx + 1.5, 0.55, cz + halfH + 0.2);
+            resGroup.add(turnstile);
+
+            // Biometric Reader status LED
+            const led = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0x10b981 }));
+            led.position.set(cx + 1.5, 1.15, cz + halfH + 0.2);
+            resGroup.add(led);
+
+            scene.add(resGroup);
+        }
+
+        /* ==========================================================================
+           ZONAS DE LA ESTIBA EN SUELO (FLOOR STAGING & BUFFER BAYS)
+           ========================================================================== */
+        function createFloorStagingBays() {
+            const stagingGroup = new THREE.Group();
+
+            // 1. Estiba de Recepción (Inbound Staging Bay)
+            createStagingBay(-21, -14, 5.5, 6.5, 0x3b82f6, [
+                { cat: 'Materiales de Construcción - Cemento', x: -22, z: -15 },
+                { cat: 'Materiales de Construcción - Acero', x: -20, z: -15 },
+                { cat: 'Químicos y Resinas Epóxicas', x: -21, z: -13 }
+            ]);
+
+            // 2. Estiba de Materiales de Construcción Pesados
+            createStagingBay(2, -3, 6.0, 5.0, 0xf59e0b, [
+                { cat: 'Materiales de Construcción - Cemento', x: 1, z: -3 },
+                { cat: 'Materiales de Construcción - Acero', x: 3, z: -3 }
+            ]);
+
+            // 3. Estiba de Despacho (Outbound Marshalling)
+            createStagingBay(-21, 11, 5.5, 6.5, 0x10b981, [
+                { cat: 'Alta Rotación (Golden Zone)', x: -22, z: 10 },
+                { cat: 'Tecnología y Electrónica', x: -20, z: 10 },
+                { cat: 'Alta Rotación (Golden Zone)', x: -21, z: 12 }
+            ]);
+
+            // 4. Estiba de Cuarentena (QA Staging)
+            createStagingBay(-9, 18, 5.0, 4.5, 0xef4444, [
+                { cat: 'Farmacéutica y Cadena de Frío', x: -9, z: 18 }
+            ]);
+
+            function createStagingBay(cx, cz, w, h, colorHex, samplePallets) {
+                const borderMat = new THREE.MeshBasicMaterial({ color: colorHex });
+                const floorMat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.12 });
+
+                const bayFloor = new THREE.Mesh(new THREE.PlaneGeometry(w, h), floorMat);
+                bayFloor.rotation.x = -Math.PI / 2;
+                bayFloor.position.set(cx, 0.013, cz);
+                stagingGroup.add(bayFloor);
+
+                const bT = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.25), borderMat);
+                bT.rotation.x = -Math.PI / 2;
+                bT.position.set(cx, 0.015, cz - h / 2);
+                stagingGroup.add(bT);
+
+                const bB = bT.clone();
+                bB.position.z = cz + h / 2;
+                stagingGroup.add(bB);
+
+                const bL = new THREE.Mesh(new THREE.PlaneGeometry(0.25, h), borderMat);
+                bL.rotation.x = -Math.PI / 2;
+                bL.position.set(cx - w / 2, 0.015, cz);
+                stagingGroup.add(bL);
+
+                const bR = bL.clone();
+                bR.position.x = cx + w / 2;
+                stagingGroup.add(bR);
+
+                samplePallets.forEach((sp, idx) => {
+                    const prodMatch = PRODUCTS_CATALOG.find(p => p.category === sp.cat) || PRODUCTS_CATALOG[0];
+                    const mockItem = {
+                        code: `EST-${cx < 0 ? (cz < 0 ? 'REC' : 'EXP') : 'MID'}-B0${idx + 1}`,
+                        category: sp.cat,
+                        productName: prodMatch.name,
+                        state: FSM_STATES.DISPONIBLE,
+                        isGoldenZone: false,
+                        totalQty: 24,
+                        availableQty: 24,
+                        weight: prodMatch.weight,
+                        volume: prodMatch.volume,
+                        lote: `LOT-2026-ST${idx + 1}`,
+                        caducidad: prodMatch.shelfLife,
+                        sku: prodMatch.sku,
+                        lpn: `LPN-EST-${Math.floor(1000 + Math.random() * 9000)}`,
+                        pedimento: `PED-2026-EST-${Math.floor(100 + Math.random() * 900)}`,
+                        rfidType: 'Circular Gran Apertura (75°)',
+                        rfidRssi: '-68 dBm',
+                        zone: 'REC',
+                        aisle: 'ESTIBA',
+                        rack: 'PISO',
+                        level: 1,
+                        coords: { x: sp.x, y: 0.1, z: sp.z }
+                    };
+                    const pMesh = create3DPalletMesh(mockItem);
+                    pMesh.position.set(sp.x, 0, sp.z);
+                    stagingGroup.add(pMesh);
+                    palletMeshList.push(pMesh);
+                    inventoryDatabase.push(mockItem);
+                });
+            }
+
+            scene.add(stagingGroup);
+        }
+
+        /* ==========================================================================
+           NUMERACIÓN DE PASILLOS A HASTA LA E (SEÑALÉTICA AÉREA 3D)
+           ========================================================================== */
+        function createAisleOverheadSigns() {
+            const signsGroup = new THREE.Group();
+            const aisleLocations = [
+                { letter: 'A', name: 'PASILLO A • ADUANA & COMPLIANCE', x: -9, z: -6.5, col: 0xf59e0b },
+                { letter: 'B', name: 'PASILLO B • MATERIALES DE CONSTRUCCIÓN', x: 2, z: -6.5, col: 0x06b6d4 },
+                { letter: 'C', name: 'PASILLO C • ALMACÉN GENERAL HIGH-BAY', x: 13, z: -6.5, col: 0x3b82f6 },
+                { letter: 'D', name: 'PASILLO D • GOLDEN ZONE ALTA ROTACIÓN', x: 8, z: 4.5, col: 0xeab308 },
+                { letter: 'E', name: 'PASILLO E • CONVEYOR & EMBALAJE', x: 23, z: 4.5, col: 0x8b5cf6 }
+            ];
+
+            const signMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 });
+            const hangerMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.9 });
+
+            aisleLocations.forEach(aisle => {
+                const sign = new THREE.Group();
+
+                // Suspended steel cables
+                const cable1 = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4.0), hangerMat);
+                cable1.position.set(-1.2, 8.5, 0);
+                sign.add(cable1);
+
+                const cable2 = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4.0), hangerMat);
+                cable2.position.set(1.2, 8.5, 0);
+                sign.add(cable2);
+
+                // Sign board
+                const board = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.9, 0.12), signMat);
+                board.position.set(0, 6.5, 0);
+                sign.add(board);
+
+                // Illuminated letter box
+                const badge = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.14),
+                    new THREE.MeshBasicMaterial({ color: aisle.col }));
+                badge.position.set(-0.9, 6.5, 0);
+                sign.add(badge);
+
+                // Downlight spotlight for aisle entrance
+                const spot = new THREE.PointLight(aisle.col, 0.4, 10, 2.0);
+                spot.position.set(0, 6.2, 0);
+                sign.add(spot);
+
+                sign.position.set(aisle.x, 0, aisle.z);
+                signsGroup.add(sign);
+            });
+
+            scene.add(signsGroup);
+        }
+
+        /* ==========================================================================
+           PUESTO DE RECARGA DE GASOLINA Y DIÉSEL (AL LADO DE LOS CAMIONES)
+           ========================================================================== */
+        function createFuelStation(x, y, z) {
+            const fuelGroup = new THREE.Group();
+
+            // Concrete safety island with yellow/black hazard curb
+            const islandGeo = new THREE.BoxGeometry(4.6, 0.3, 8.5);
+            const islandMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
+            const island = new THREE.Mesh(islandGeo, islandMat);
+            island.position.set(x, 0.15, z);
+            island.receiveShadow = true;
+            fuelGroup.add(island);
+
+            // Safety bollards at corners
+            const bollardGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.2, 12);
+            const bollardMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.5 });
+            const bollardPositions = [
+                [-1.9, -3.8], [1.9, -3.8],
+                [-1.9, 3.8],  [1.9, 3.8]
+            ];
+            bollardPositions.forEach(([bx, bz]) => {
+                const b = new THREE.Mesh(bollardGeo, bollardMat);
+                b.position.set(x + bx, 0.6, z + bz);
+                b.castShadow = true;
+                fuelGroup.add(b);
+            });
+
+            // Overhead Canopy Roof
+            const colMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8 });
+            const col1 = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 5.0), colMat);
+            col1.position.set(x, 2.5, z - 2.8);
+            fuelGroup.add(col1);
+
+            const col2 = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 5.0), colMat);
+            col2.position.set(x, 2.5, z + 2.8);
+            fuelGroup.add(col2);
+
+            const canopyRoof = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.45, 10.5),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4 }));
+            canopyRoof.position.set(x, 5.2, z);
+            canopyRoof.castShadow = true;
+            fuelGroup.add(canopyRoof);
+
+            // Canopy fascia signage
+            const fasciaMat = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
+            const fasciaF = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 10.3), fasciaMat);
+            fasciaF.position.set(x + 3.25, 5.2, z);
+            fuelGroup.add(fasciaF);
+
+            // Dispensers: Pump 1 Diésel, Pump 2 Gasolina
+            createDispenser(x, z - 1.8, 'DIÉSEL ULTRA-BAJO AZUFRE', 0x15803d);
+            createDispenser(x, z + 1.8, 'GASOLINA FLOTA COMERCIAL', 0xb91c1c);
+
+            function createDispenser(px, pz, label, pumpColor) {
+                const pumpGeo = new THREE.BoxGeometry(1.0, 2.1, 0.8);
+                const pumpMat = new THREE.MeshStandardMaterial({ color: pumpColor, metalness: 0.4, roughness: 0.3 });
+                const pump = new THREE.Mesh(pumpGeo, pumpMat);
+                pump.position.set(px, 1.25, pz);
+                pump.castShadow = true;
+                fuelGroup.add(pump);
+
+                // Digital screen
+                const screen = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.4, 0.5),
+                    new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+                screen.position.set(px + 0.51, 1.6, pz);
+                fuelGroup.add(screen);
+
+                const screen2 = screen.clone();
+                screen2.position.x = px - 0.51;
+                fuelGroup.add(screen2);
+
+                // Hoses
+                const hoseMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
+                const hose1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4), hoseMat);
+                hose1.position.set(px + 0.48, 1.1, pz + 0.3);
+                fuelGroup.add(hose1);
+
+                const hose2 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4), hoseMat);
+                hose2.position.set(px - 0.48, 1.1, pz + 0.3);
+                fuelGroup.add(hose2);
+            }
+
+            // Chemical Extinguisher Cabinet
+            const extGeo = new THREE.BoxGeometry(0.4, 0.9, 0.3);
+            const extMat = new THREE.MeshStandardMaterial({ color: 0xdc2626 });
+            const extCabinet = new THREE.Mesh(extGeo, extMat);
+            extCabinet.position.set(x, 1.0, z - 3.8);
+            fuelGroup.add(extCabinet);
+
+            // Warning sign
+            const warnSign = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.5, 1.4),
+                new THREE.MeshBasicMaterial({ color: 0xf59e0b }));
+            warnSign.position.set(x + 2.1, 1.8, z);
+            fuelGroup.add(warnSign);
+
+            scene.add(fuelGroup);
+        }
+
+        /* ==========================================================================
+           CINTA TRANSPORTADORA AUTOMATIZADA (CONVEYOR BELT SYSTEM)
+           ========================================================================== */
+        const conveyorBoxes = [];
+        let conveyorTrackGroup = null;
+
+        function createConveyorSystem() {
+            conveyorTrackGroup = new THREE.Group();
+            const startZ = 17;
+            const endZ = -3;
+            const length = Math.abs(endZ - startZ);
+            const posX = 27;
+            const posY = 1.05;
+
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.3 });
+            const rollerMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.7, roughness: 0.4 });
+
+            // Side rails
+            const railL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, length), frameMat);
+            railL.position.set(posX - 0.5, posY + 0.1, (startZ + endZ) / 2);
+            conveyorTrackGroup.add(railL);
+
+            const railR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, length), frameMat);
+            railR.position.set(posX + 0.5, posY + 0.1, (startZ + endZ) / 2);
+            conveyorTrackGroup.add(railR);
+
+            // Support legs
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6 });
+            for (let z = endZ; z <= startZ; z += 3.5) {
+                const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, posY), legMat);
+                legL.position.set(posX - 0.5, posY / 2, z);
+                conveyorTrackGroup.add(legL);
+
+                const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, posY), legMat);
+                legR.position.set(posX + 0.5, posY / 2, z);
+                conveyorTrackGroup.add(legR);
+
+                const brace = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 0.04), legMat);
+                brace.position.set(posX, 0.4, z);
+                conveyorTrackGroup.add(brace);
+            }
+
+            // Motorized rollers
+            const rollerCount = 42;
+            for (let i = 0; i < rollerCount; i++) {
+                const rz = startZ - (i * length) / (rollerCount - 1);
+                const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.92, 12), rollerMat);
+                roller.rotation.z = Math.PI / 2;
+                roller.position.set(posX, posY + 0.04, rz);
+                conveyorTrackGroup.add(roller);
+            }
+
+            // Moving transport boxes
+            const boxColors = [0x0284c7, 0xf59e0b, 0x10b981, 0x8b5cf6, 0xef4444, 0x06b6d4];
+            const boxSpacing = length / 6;
+
+            for (let i = 0; i < 6; i++) {
+                const boxGroup = new THREE.Group();
+                const bMat = new THREE.MeshStandardMaterial({ color: boxColors[i % boxColors.length], roughness: 0.5 });
+                const cBox = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 0.55), bMat);
+                cBox.castShadow = true;
+                boxGroup.add(cBox);
+
+                const label = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.12), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                label.position.set(0.33, 0.05, 0);
+                label.rotation.y = Math.PI / 2;
+                boxGroup.add(label);
+
+                const currentZ = startZ - i * boxSpacing;
+                boxGroup.position.set(posX, posY + 0.22, currentZ);
+                conveyorTrackGroup.add(boxGroup);
+
+                conveyorBoxes.push({
+                    mesh: boxGroup,
+                    startZ: startZ,
+                    endZ: endZ,
+                    speed: 1.4
+                });
+            }
+
+            scene.add(conveyorTrackGroup);
+        }
+
+        function updateConveyorAnimation(delta) {
+            conveyorBoxes.forEach(item => {
+                item.mesh.position.z -= item.speed * delta;
+                if (item.mesh.position.z <= item.endZ) {
+                    item.mesh.position.z = item.startZ;
+                }
+            });
+        }
+
+        /* ==========================================================================
+           CATÁLOGO DE PRODUCTOS Y MODELADO 3D MULTI-MATERIAL
+           ========================================================================== */
+        const PRODUCTS_CATALOG = [
+            {
+                name: 'Cemento Portland Compuesto Gris (50 kg)',
+                category: 'Materiales de Construcción - Cemento',
+                sku: 'SKU-CEM-50KG',
+                weight: '1,200 kg (24 sacos)',
+                volume: '1.44 m³',
+                packaging: 'Sacos de Kraft sobre Pallet',
+                shelfLife: '12 Meses'
+            },
+            {
+                name: 'Perfiles de Acero Galvanizado C-4x2 (6m)',
+                category: 'Materiales de Construcción - Acero',
+                sku: 'SKU-ACER-GALV',
+                weight: '950 kg',
+                volume: '1.20 m³',
+                packaging: 'Atados con Fleje de Acero',
+                shelfLife: 'Indefinido'
+            },
+            {
+                name: 'Tambores de Resina Epóxica para Pavimentos',
+                category: 'Químicos y Resinas Epóxicas',
+                sku: 'SKU-EPX-200L',
+                weight: '880 kg (4 tambores)',
+                volume: '1.60 m³',
+                packaging: 'Tambores Metálicos 200L',
+                shelfLife: '24 Meses'
+            },
+            {
+                name: 'Vacunas y Biológicos Termolábiles (2° a 8°C)',
+                category: 'Farmacéutica y Cadena de Frío',
+                sku: 'SKU-VAC-COLD',
+                weight: '240 kg',
+                volume: '0.95 m³',
+                packaging: 'Contenedores Isotérmicos Homologados',
+                shelfLife: '18 Meses'
+            },
+            {
+                name: 'Sensores IoT Industriales & Gateways UHF',
+                category: 'Tecnología y Electrónica',
+                sku: 'SKU-IOT-UHF',
+                weight: '180 kg',
+                volume: '0.85 m³',
+                packaging: 'Cajas Anti-estáticas ESD',
+                shelfLife: '36 Meses'
+            },
+            {
+                name: 'Kits de Herramientas Eléctricas Profesionales',
+                category: 'Alta Rotación (Golden Zone)',
+                sku: 'SKU-TOOL-KIT',
+                weight: '380 kg',
+                volume: '1.10 m³',
+                packaging: 'Cajas Corrugadas Reforzadas',
+                shelfLife: 'Indefinido'
+            }
+        ];
+
+        /* ==========================================================================
+           3D RACKS & HIERARCHICAL WMS STORAGE SYSTEM (PASILLOS A HASTA E)
+           ========================================================================== */
+        const rackMeshList = [];
+        const palletMeshList = [];
+        const rfidAntennaVisuals = [];
+
+        function buildWarehouseRacks() {
+            // Racks distributed across 5 Aisles: PSA, PSB, PSC, PSD, PSE
+            const rackConfigs = [
+                // Pasillo A (PSA) - Depósito Restringido Aduanero (RES)
+                { zone: 'RES', aisle: 'PSA', rackId: 'R01', x: -14, z: -16, bays: 3, levels: 3 },
+                { zone: 'RES', aisle: 'PSA', rackId: 'R02', x: -5,  z: -16, bays: 3, levels: 3 },
+
+                // Pasillo B (PSB) - Materiales de Construcción Pesados (Cemento, Acero, Epóxica)
+                { zone: 'NMP', aisle: 'PSB', rackId: 'R01', x: 2,   z: -18, bays: 3, levels: 3 },
+                { zone: 'NMP', aisle: 'PSB', rackId: 'R02', x: 2,   z: -11, bays: 3, levels: 3 },
+
+                // Pasillo C (PSC) - Racks de Gran Altura High-Bay (Z >= 6m, UHF Linear RFID)
+                { zone: 'NMP', aisle: 'PSC', rackId: 'R03', x: 13,  z: -18, bays: 4, levels: 4 },
+                { zone: 'NMP', aisle: 'PSC', rackId: 'R04', x: 13,  z: -11, bays: 4, levels: 4 },
+
+                // Pasillo D (PSD) - Golden Zone ergonómica (Alta rotación Clase A)
+                { zone: 'FST', aisle: 'PSD', rackId: 'R01', x: 2,   z: 11,  bays: 4, levels: 3 },
+                { zone: 'FST', aisle: 'PSD', rackId: 'R02', x: 13,  z: 11,  bays: 4, levels: 3 },
+
+                // Pasillo E (PSE) - Picking adyacente a la Cinta Transportadora
+                { zone: 'FST', aisle: 'PSE', rackId: 'R03', x: 23,  z: 6,   bays: 4, levels: 3 },
+                { zone: 'NMP', aisle: 'PSE', rackId: 'R04', x: 23,  z: -11, bays: 4, levels: 3 },
+
+                // Zona de Cuarentena (QUA)
+                { zone: 'QUA', aisle: 'PSA', rackId: 'R01', x: -10, z: 11,  bays: 3, levels: 2 }
+            ];
+
+            rackConfigs.forEach(cfg => {
+                createRackModule(cfg);
+            });
+        }
+
+        function createRackModule(cfg) {
+            const rackGroup = new THREE.Group();
+            const bayWidth = 3.2;
+            const bayDepth = 1.4;
+            const levelHeight = 1.7;
+            const totalWidth = cfg.bays * bayWidth;
+            const totalHeight = cfg.levels * levelHeight;
+
+            const uprightMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, metalness: 0.6, roughness: 0.4 });
+            const beamMat = new THREE.MeshStandardMaterial({ color: 0xea580c, metalness: 0.5, roughness: 0.4 });
+            const wireMat = new THREE.MeshStandardMaterial({ color: 0x64748b, wireframe: true, transparent: true, opacity: 0.3 });
+
+            for (let i = 0; i <= cfg.bays; i++) {
+                const posX = -totalWidth / 2 + i * bayWidth;
+                const upF = new THREE.Mesh(new THREE.BoxGeometry(0.12, totalHeight, 0.12), uprightMat);
+                upF.position.set(posX, totalHeight / 2, bayDepth / 2);
+                upF.castShadow = true;
+                rackGroup.add(upF);
+
+                const upB = upF.clone();
+                upB.position.z = -bayDepth / 2;
+                rackGroup.add(upB);
+            }
+
+            for (let lvl = 1; lvl <= cfg.levels; lvl++) {
+                const beamY = lvl * levelHeight - 0.2;
+
+                for (let b = 0; b < cfg.bays; b++) {
+                    const bayCenterX = -totalWidth / 2 + b * bayWidth + bayWidth / 2;
+
+                    const beamFront = new THREE.Mesh(new THREE.BoxGeometry(bayWidth - 0.1, 0.1, 0.08), beamMat);
+                    beamFront.position.set(bayCenterX, beamY, bayDepth / 2);
+                    rackGroup.add(beamFront);
+
+                    const beamBack = beamFront.clone();
+                    beamBack.position.z = -bayDepth / 2;
+                    rackGroup.add(beamBack);
+
+                    const deck = new THREE.Mesh(new THREE.PlaneGeometry(bayWidth - 0.12, bayDepth - 0.12), wireMat);
+                    deck.rotation.x = -Math.PI / 2;
+                    deck.position.set(bayCenterX, beamY + 0.05, 0);
+                    rackGroup.add(deck);
+
+                    for (let pos = 1; pos <= 2; pos++) {
+                        const posOffset = pos === 1 ? -0.8 : 0.8;
+                        const palletX = cfg.x + bayCenterX + posOffset;
+                        const palletY = beamY + 0.05;
+                        const palletZ = cfg.z;
+
+                        // WMS Hierarchical standard: ZON-PAS-RAC-NIV-POS
+                        const bayPad = String(b + 1).padStart(2, '0');
+                        const lvlPad = String(lvl).padStart(2, '0');
+                        const posPad = String(pos).padStart(2, '0');
+                        const locCode = `${cfg.zone}-${cfg.aisle}-${cfg.rackId}-N${lvlPad}-P${posPad}`;
+
+                        let state = FSM_STATES.DISPONIBLE;
+                        let pedimento = `PED-2026-MX-${Math.floor(1000 + Math.random() * 9000)}`;
+
+                        if (cfg.zone === 'RES') {
+                            state = FSM_STATES.RETENIDO_ADUANA;
+                        } else if (cfg.zone === 'QUA') {
+                            state = FSM_STATES.CUARENTENA;
+                        }
+
+                        // Assign catalog product based on aisle & zone
+                        let prod = PRODUCTS_CATALOG[5];
+                        if (cfg.zone === 'RES') {
+                            prod = Math.random() > 0.5 ? PRODUCTS_CATALOG[3] : PRODUCTS_CATALOG[4];
+                        } else if (cfg.aisle === 'PSB') {
+                            // Materiales de construcción
+                            const r = Math.random();
+                            prod = r < 0.4 ? PRODUCTS_CATALOG[0] : (r < 0.75 ? PRODUCTS_CATALOG[1] : PRODUCTS_CATALOG[2]);
+                        } else if (cfg.aisle === 'PSC') {
+                            prod = lvl >= 3 ? PRODUCTS_CATALOG[4] : PRODUCTS_CATALOG[2];
+                        } else if (cfg.zone === 'FST') {
+                            prod = PRODUCTS_CATALOG[5];
+                        }
+
+                        const isElevated = lvl >= 4;
+                        const rfidType = isElevated ? 'Lineal Haz Estrecho (30°, 10 dBi)' : 'Circular Gran Apertura (75°, 6 dBiC)';
+
+                        const invItem = {
+                            code: locCode,
+                            zone: cfg.zone,
+                            aisle: cfg.aisle,
+                            rack: cfg.rackId,
+                            level: lvl,
+                            position: pos,
+                            coords: { x: Number(palletX.toFixed(2)), y: Number(palletY.toFixed(2)), z: Number(palletZ.toFixed(2)) },
+                            state: state,
+                            sku: prod.sku,
+                            productName: prod.name,
+                            category: prod.category,
+                            weight: prod.weight,
+                            volume: prod.volume,
+                            packaging: prod.packaging,
+                            lote: `LOT-2026-P${b + 1}L${lvl}`,
+                            caducidad: prod.shelfLife,
+                            lpn: `LPN-${Math.floor(10000 + Math.random() * 90000)}`,
+                            totalQty: 48,
+                            availableQty: state === FSM_STATES.RETENIDO_ADUANA || state === FSM_STATES.CUARENTENA ? 0 : 48,
+                            reservedQty: 0,
+                            pedimento: pedimento,
+                            isRestricted: cfg.zone === 'RES',
+                            isGoldenZone: cfg.zone === 'FST' && (lvl === 2 || lvl === 3),
+                            rfidType: rfidType,
+                            rfidRssi: '-66 dBm'
+                        };
+
+                        inventoryDatabase.push(invItem);
+
+                        if (Math.random() > 0.12) {
+                            const palletMesh = create3DPalletMesh(invItem);
+                            palletMesh.position.set(palletX, palletY, palletZ);
+                            scene.add(palletMesh);
+                            invItem.mesh = palletMesh;
+                            palletMeshList.push(palletMesh);
+                        }
+                    }
+                }
+
+                if (lvl === cfg.levels) {
+                    const topBeamY = lvl * levelHeight + 0.1;
+                    const antennaX = cfg.x;
+                    const antennaZ = cfg.z;
+                    const isHigh = cfg.levels >= 4;
+                    createRfidAntenna(antennaX, topBeamY, antennaZ, isHigh);
+                }
+            }
+
+            rackGroup.position.set(cfg.x, 0, cfg.z);
+            scene.add(rackGroup);
+            rackMeshList.push(rackGroup);
+        }
+
+        // Realistic 3D Pallet Mesh Generator with Multi-Material Support
+        function create3DPalletMesh(invItem) {
+            const group = new THREE.Group();
+            group.userData = { wmsItem: invItem };
+
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.85 });
+            const palletBase = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.14, 1.1), woodMat);
+            palletBase.position.y = 0.07;
+            palletBase.castShadow = true;
+            group.add(palletBase);
+
+            const cat = invItem.category;
+
+            if (cat === 'Materiales de Construcción - Cemento') {
+                // Stacked cement sacks
+                const sackMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.95 });
+                const bandMat = new THREE.MeshBasicMaterial({ color: 0xb45309 });
+                for (let layer = 0; layer < 3; layer++) {
+                    const y = 0.14 + layer * 0.28 + 0.14;
+                    for (let sx of [-0.35, 0.35]) {
+                        for (let sz of [-0.28, 0.28]) {
+                            const sack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.24, 0.45), sackMat);
+                            sack.position.set(sx, y, sz);
+                            sack.castShadow = true;
+                            group.add(sack);
+
+                            const band = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.46), bandMat);
+                            band.position.set(sx, y, sz);
+                            group.add(band);
+                        }
+                    }
+                }
+            } else if (cat === 'Materiales de Construcción - Acero') {
+                // Bundled steel structural beams
+                const steelMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.95, roughness: 0.18 });
+                const strapMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+                for (let layer = 0; layer < 4; layer++) {
+                    const y = 0.14 + layer * 0.18 + 0.09;
+                    for (let sx = -0.4; sx <= 0.4; sx += 0.26) {
+                        const beam = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 1.15), steelMat);
+                        beam.position.set(sx, y, 0);
+                        beam.castShadow = true;
+                        group.add(beam);
+                    }
+                }
+                for (let bz of [-0.35, 0.35]) {
+                    const strap = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.74, 0.04), strapMat);
+                    strap.position.set(0, 0.5, bz);
+                    group.add(strap);
+                }
+            } else if (cat === 'Químicos y Resinas Epóxicas') {
+                // Chemical / Epoxy drums
+                const drumMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.7, roughness: 0.3 });
+                const rimMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8 });
+                const hazardMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+                for (let dx of [-0.3, 0.3]) {
+                    for (let dz of [-0.25, 0.25]) {
+                        const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.85, 16), drumMat);
+                        drum.position.set(dx, 0.14 + 0.425, dz);
+                        drum.castShadow = true;
+                        group.add(drum);
+
+                        const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.04, 16), rimMat);
+                        rim.position.set(dx, 0.14 + 0.85, dz);
+                        group.add(rim);
+
+                        const haz = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.12), hazardMat);
+                        haz.rotation.z = Math.PI / 4;
+                        haz.position.set(dx, 0.14 + 0.5, dz + (dz > 0 ? 0.23 : -0.23));
+                        if (dz < 0) haz.rotation.y = Math.PI;
+                        group.add(haz);
+                    }
+                }
+            } else if (cat === 'Farmacéutica y Cadena de Frío') {
+                // Isothermal white containers
+                const isoMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
+                const sealMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6 });
+                for (let layer = 0; layer < 2; layer++) {
+                    const y = 0.14 + layer * 0.42 + 0.21;
+                    for (let bx of [-0.3, 0.3]) {
+                        for (let bz of [-0.25, 0.25]) {
+                            const box = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.38, 0.46), isoMat);
+                            box.position.set(bx, y, bz);
+                            box.castShadow = true;
+                            group.add(box);
+
+                            const seal = new THREE.Mesh(new THREE.BoxGeometry(0.57, 0.05, 0.47), sealMat);
+                            seal.position.set(bx, y, bz);
+                            group.add(seal);
+                        }
+                    }
+                }
+            } else {
+                // Standard corrugated cartons / Electronic kits
+                const boxColor = invItem.isGoldenZone ? 0xfef08a : 0xd97706;
+                const boxMat = new THREE.MeshStandardMaterial({ color: boxColor, roughness: 0.85 });
+                const boxGeo = new THREE.BoxGeometry(0.55, 0.45, 0.45);
+                const tapeMat = new THREE.MeshBasicMaterial({ color: 0x92400e });
+
+                for (let bx = -0.3; bx <= 0.3; bx += 0.6) {
+                    for (let bz = -0.25; bz <= 0.25; bz += 0.5) {
+                        for (let by = 0; by < 2; by++) {
+                            const box = new THREE.Mesh(boxGeo, boxMat);
+                            box.position.set(bx, 0.14 + by * 0.45 + 0.22, bz);
+                            box.castShadow = true;
+                            group.add(box);
+
+                            const tape = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.04, 0.1), tapeMat);
+                            tape.position.set(bx, 0.14 + by * 0.45 + 0.45, bz);
+                            group.add(tape);
+                        }
+                    }
+                }
+            }
+
+            // Status Glow Ring / Indicator above pallet
+            const statusColor = getStatusColor(invItem.state);
+            const statusRingMat = new THREE.MeshBasicMaterial({ color: statusColor, transparent: true, opacity: 0.85 });
+            const statusRing = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 8, 24), statusRingMat);
+            statusRing.rotation.x = Math.PI / 2;
+            statusRing.position.y = 1.25;
+            group.add(statusRing);
+            invItem.statusRing = statusRing;
+
+            if (invItem.isGoldenZone) {
+                const goldBadge = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.02),
+                    new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+                goldBadge.position.set(0, 1.15, 0.56);
+                group.add(goldBadge);
+            }
+
+            return group;
+        }
+
+        function getStatusColor(state) {
+            switch (state) {
+                case FSM_STATES.DISPONIBLE: return 0x10b981;
+                case FSM_STATES.RETENIDO_ADUANA: return 0xf59e0b;
+                case FSM_STATES.CUARENTENA: return 0xef4444;
+                case FSM_STATES.RESERVADO: return 0x8b5cf6;
+                default: return 0x64748b;
+            }
+        }
+
+        // 3D RFID Antenna with Electromagnetic Beam Cone Visualizer
+        function createRfidAntenna(x, y, z, isNarrowBeam) {
+            const antGroup = new THREE.Group();
+
+            // Antenna physical panel
+            const panelGeo = new THREE.BoxGeometry(0.6, 0.6, 0.12);
+            const panelMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.3, roughness: 0.2 });
+            const panel = new THREE.Mesh(panelGeo, panelMat);
+            panel.position.set(x, y + 0.3, z);
+            antGroup.add(panel);
+
+            // Polarized radiation cone visualization (Narrow 30° vs Wide 75°)
+            const coneAngle = isNarrowBeam ? 30 : 75;
+            const coneRadius = isNarrowBeam ? 1.6 : 3.8;
+            const coneHeight = isNarrowBeam ? 5.5 : 4.2;
+            const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 16, 1, true);
+            const coneColor = isNarrowBeam ? 0x06b6d4 : 0xa855f7;
+
+            const coneMat = new THREE.MeshBasicMaterial({
+                color: coneColor,
+                transparent: true,
+                opacity: 0.18,
+                wireframe: true,
+                side: THREE.DoubleSide
+            });
+            const beamCone = new THREE.Mesh(coneGeo, coneMat);
+            beamCone.position.set(x, y + 0.3 - coneHeight / 2, z);
+            beamCone.rotation.x = Math.PI; // Pointing downward toward racks
+            antGroup.add(beamCone);
+
+            rfidAntennaVisuals.push(beamCone);
+            scene.add(antGroup);
+        }
+
+        /* ==========================================================================
+           LOGISTICS DOCKS & TRUCKS (REC & EXP)
+           ========================================================================== */
+        function buildDockFacilities() {
+            // Inbound Semi-Truck at Dock REC
+            createDeliveryTruck(-30, 0, -14, 0x1d4ed8, 'INBOUND TRANS-CARGO');
+
+            // Outbound Semi-Truck at Dock EXP
+            createDeliveryTruck(-30, 0, 11, 0x059669, 'OUTBOUND LOGISTICS EXP');
+
+            // Packing Workstations in PAC zone
+            createPackingTables(29, 0, 0);
+        }
+
+        function createDeliveryTruck(x, y, z, cabColor, textLabel) {
+            const truck = new THREE.Group();
+
+            // Trailer body
+            const trailerGeo = new THREE.BoxGeometry(11, 3.6, 3.2);
+            const trailerMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.4 });
+            const trailer = new THREE.Mesh(trailerGeo, trailerMat);
+            trailer.position.set(x + 1.5, 2.5, z);
+            trailer.castShadow = true;
+            truck.add(trailer);
+
+            // Cab
+            const cabGeo = new THREE.BoxGeometry(3.5, 3.2, 3.0);
+            const cabMat = new THREE.MeshStandardMaterial({ color: cabColor, metalness: 0.3, roughness: 0.4 });
+            const cab = new THREE.Mesh(cabGeo, cabMat);
+            cab.position.set(x - 5.5, 2.3, z);
+            cab.castShadow = true;
+            truck.add(cab);
+
+            // Wheels
+            const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 });
+            const wheelPositions = [
+                [-6.2, 1.6], [-6.2, -1.6],
+                [-1.5, 1.6], [-1.5, -1.6],
+                [4.5, 1.6],  [4.5, -1.6],
+                [5.8, 1.6],  [5.8, -1.6]
+            ];
+            wheelPositions.forEach(([wx, wz]) => {
+                const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(x + wx, 0.5, z + wz);
+                wheel.castShadow = true;
+                truck.add(wheel);
+            });
+
+            scene.add(truck);
+        }
+
+        function createPackingTables(x, y, z) {
+            const packGroup = new THREE.Group();
+            const tableMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.5 });
+            const topMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.5 });
+
+            // 2 packing stations
+            for (let i = -3; i <= 3; i += 6) {
+                // Table
+                const tableTop = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.1, 1.6), topMat);
+                tableTop.position.set(x, 1.0, z + i);
+                packGroup.add(tableTop);
+
+                // Table legs
+                for (let lx of [-1.4, 1.4]) {
+                    for (let lz of [-0.6, 0.6]) {
+                        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.95), tableMat);
+                        leg.position.set(x + lx, 0.5, z + i + lz);
+                        packGroup.add(leg);
+                    }
+                }
+
+                // PC Screen / Barcode scanner station
+                const monitor = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.5), new THREE.MeshBasicMaterial({ color: 0x06b6d4 }));
+                monitor.position.set(x - 1.0, 1.3, z + i);
+                packGroup.add(monitor);
+            }
+            scene.add(packGroup);
+        }
+
+        /* ==========================================================================
+           ANIMATED CHARACTERS & OPERATIONAL VEHICLES
+           ========================================================================== */
+        // Reusable character builder with safety vest, helmet and animated legs
+        function createHumanWorkerMesh(vestColor = 0xf59e0b) {
+            const worker = new THREE.Group();
+
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.8 });
+            const clothesMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            const vestMat = new THREE.MeshStandardMaterial({ color: vestColor, roughness: 0.5 });
+            const helmetMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+
+            // Torso & High-Vis Vest
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.58, 0.26), vestMat);
+            torso.position.y = 1.15;
+            torso.castShadow = true;
+            worker.add(torso);
+
+            // Reflective stripes on vest
+            const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.08, 0.27),
+                new THREE.MeshBasicMaterial({ color: 0xe2e8f0 }));
+            stripe.position.y = 1.15;
+            worker.add(stripe);
+
+            // Head & Hard Hat
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 12), skinMat);
+            head.position.y = 1.62;
+            worker.add(head);
+
+            const helmet = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.14, 12), helmetMat);
+            helmet.position.y = 1.72;
+            worker.add(helmet);
+
+            // Left & Right Legs (for walking animation)
+            const legGeo = new THREE.BoxGeometry(0.16, 0.72, 0.16);
+            const leftLeg = new THREE.Mesh(legGeo, clothesMat);
+            leftLeg.position.set(-0.12, 0.45, 0);
+            leftLeg.castShadow = true;
+            worker.add(leftLeg);
+
+            const rightLeg = new THREE.Mesh(legGeo, clothesMat);
+            rightLeg.position.set(0.12, 0.45, 0);
+            rightLeg.castShadow = true;
+            worker.add(rightLeg);
+
+            // Arms
+            const armGeo = new THREE.BoxGeometry(0.12, 0.5, 0.12);
+            const leftArm = new THREE.Mesh(armGeo, vestMat);
+            leftArm.position.set(-0.28, 1.15, 0);
+            worker.add(leftArm);
+
+            const rightArm = new THREE.Mesh(armGeo, vestMat);
+            rightArm.position.set(0.28, 1.15, 0);
+            worker.add(rightArm);
+
+            worker.userData = { leftLeg, rightLeg, leftArm, rightArm, walkCycle: 0 };
+            return worker;
+        }
+
+        // Forklift 3D Model with moving mast and driver
+        function createForkliftModel() {
+            const fl = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.5, roughness: 0.3 });
+            const darkMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.7 });
+            const steelMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8 });
+
+            // Main chassis
+            const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 1.4), bodyMat);
+            body.position.set(0, 0.65, 0);
+            body.castShadow = true;
+            fl.add(body);
+
+            // Counterweight rear
+            const cw = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 1.35), darkMat);
+            cw.position.set(-1.2, 0.7, 0);
+            fl.add(cw);
+
+            // Roll cage & roof
+            const cageMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+            for (let px of [-0.6, 0.4]) {
+                for (let pz of [-0.65, 0.65]) {
+                    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.6), cageMat);
+                    post.position.set(px, 1.7, pz);
+                    fl.add(post);
+                }
+            }
+            const roof = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 1.4), cageMat);
+            roof.position.set(-0.1, 2.5, 0);
+            fl.add(roof);
+
+            // Mast (Vertical rails for forks)
+            const mastGeo = new THREE.BoxGeometry(0.12, 3.4, 0.12);
+            const mastL = new THREE.Mesh(mastGeo, darkMat);
+            mastL.position.set(1.25, 1.8, -0.45);
+            const mastR = new THREE.Mesh(mastGeo, darkMat);
+            mastR.position.set(1.25, 1.8, 0.45);
+            fl.add(mastL);
+            fl.add(mastR);
+
+            // Carriage & Forks (Movable on Z)
+            const forkCarriage = new THREE.Group();
+            const crossbar = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 1.1), steelMat);
+            crossbar.position.set(1.3, 0.4, 0);
+            forkCarriage.add(crossbar);
+
+            // Two tines
+            const tine1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.12), steelMat);
+            tine1.position.set(1.85, 0.35, -0.3);
+            const tine2 = tine1.clone();
+            tine2.position.z = 0.3;
+            forkCarriage.add(tine1);
+            forkCarriage.add(tine2);
+            fl.add(forkCarriage);
+
+            // Wheels
+            const wGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
+            for (let [wx, wz] of [[-0.8, -0.75], [-0.8, 0.75], [0.8, -0.75], [0.8, 0.75]]) {
+                const w = new THREE.Mesh(wGeo, darkMat);
+                w.rotation.z = Math.PI / 2;
+                w.position.set(wx, 0.35, wz);
+                fl.add(w);
+            }
+
+            // Driver Miguel
+            const driver = createHumanWorkerMesh(0x2563eb);
+            driver.scale.set(0.85, 0.85, 0.85);
+            driver.position.set(-0.1, 0.6, 0);
+            fl.add(driver);
+
+            fl.userData = { forkCarriage, targetForkHeight: 0.4, currentForkHeight: 0.4 };
+            return fl;
+        }
+
+        // Autonomous Drone Model ("AeroScan AI-4") with spinning rotors & laser cone
+        function createAutonomousDroneModel() {
+            const drone = new THREE.Group();
+            const carbonMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3 });
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8 });
+            const propMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.8 });
+
+            // Main body
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.16, 0.7), carbonMat);
+            drone.add(body);
+
+            // Dual camera optics (Rack QR code + Pallet LPN)
+            const camLens = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.15, 12),
+                new THREE.MeshBasicMaterial({ color: 0x10b981 }));
+            camLens.rotation.x = Math.PI / 2;
+            camLens.position.set(0, -0.08, 0.35);
+            drone.add(camLens);
+
+            // 4 Quadcopter Arms & Rotors
+            const rotors = [];
+            const armOffsets = [
+                [-0.45, -0.45], [0.45, -0.45],
+                [-0.45, 0.45],  [0.45, 0.45]
+            ];
+
+            armOffsets.forEach(([ax, az]) => {
+                const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.6), armMat);
+                arm.rotation.z = Math.PI / 2;
+                arm.position.set(ax / 2, 0, az / 2);
+                drone.add(arm);
+
+                // Rotor motor housing
+                const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.1), carbonMat);
+                motor.position.set(ax, 0.05, az);
+                drone.add(motor);
+
+                // Spinning propeller
+                const prop = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.02, 0.08), propMat);
+                prop.position.set(ax, 0.12, az);
+                drone.add(prop);
+                rotors.push(prop);
+            });
+
+            // Downward scanning LiDAR / Laser Cone (Green)
+            const scanConeGeo = new THREE.ConeGeometry(1.6, 4.0, 16, 1, true);
+            const scanConeMat = new THREE.MeshBasicMaterial({
+                color: 0x10b981,
+                transparent: true,
+                opacity: 0.22,
+                side: THREE.DoubleSide
+            });
+            const scanCone = new THREE.Mesh(scanConeGeo, scanConeMat);
+            scanCone.position.set(0, -2.0, 0);
+            scanCone.rotation.x = Math.PI;
+            drone.add(scanCone);
+
+            drone.userData = { rotors, scanCone, patrolWaypoints: [], currentWpIndex: 0 };
+            return drone;
+        }
+
+        /* Instantiate Characters & Assign Operational Tasks */
+        let workerCarlos, workerElena, forkliftMiguel, workerMateo, workerSofia, workerAndres, droneAeroScan;
+
+        function initializeOperationalAgents() {
+            // 1. Carlos - Inbound Logistics (REC)
+            workerCarlos = createHumanWorkerMesh(0x2563eb);
+            workerCarlos.position.set(-25, 0, -14);
+            scene.add(workerCarlos);
+
+            // 2. Dra. Elena - Customs Compliance Officer (RES)
+            workerElena = createHumanWorkerMesh(0xd97706);
+            workerElena.position.set(-9, 0, -7);
+            // Tablet in hand
+            const tablet = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.3), new THREE.MeshBasicMaterial({ color: 0x06b6d4 }));
+            tablet.position.set(0.25, 1.2, 0.2);
+            workerElena.add(tablet);
+            scene.add(workerElena);
+
+            // 3. Miguel - High-Elevation Forklift Operator
+            forkliftMiguel = createForkliftModel();
+            forkliftMiguel.position.set(4, 0, -5);
+            scene.add(forkliftMiguel);
+
+            // 4. Mateo - Order Picker (Manhattan Route in FST)
+            workerMateo = createHumanWorkerMesh(0xca8a04);
+            workerMateo.position.set(4, 0, 11);
+            // Picking hand-truck / cart
+            const cart = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.8, 1.4), new THREE.MeshStandardMaterial({ color: 0x64748b, wireframe: true }));
+            cart.position.set(0.9, 0.45, 0);
+            workerMateo.add(cart);
+            scene.add(workerMateo);
+
+            // 5. Sofía - Quality Auditor in Cuarentena (QUA)
+            workerSofia = createHumanWorkerMesh(0xef4444);
+            workerSofia.position.set(-9, 0, 11);
+            scene.add(workerSofia);
+
+            // 6. Andrés - Packaging & Outbound Dispatch (PAC & EXP)
+            workerAndres = createHumanWorkerMesh(0x10b981);
+            workerAndres.position.set(28, 0, 0);
+            scene.add(workerAndres);
+
+            // 7. Dron Autónomo AeroScan AI-4
+            droneAeroScan = createAutonomousDroneModel();
+            droneAeroScan.position.set(8, 4.8, -18);
+            scene.add(droneAeroScan);
+
+            // Setup Drone Waypoint Path along aisles
+            droneAeroScan.userData.patrolWaypoints = [
+                new THREE.Vector3(8, 4.8, -20),
+                new THREE.Vector3(8, 4.8, -8),
+                new THREE.Vector3(14, 4.8, -8),
+                new THREE.Vector3(14, 4.8, -20),
+                new THREE.Vector3(20, 4.8, -20),
+                new THREE.Vector3(20, 4.8, -8),
+                new THREE.Vector3(8, 4.8, 6),
+                new THREE.Vector3(8, 4.8, 17),
+                new THREE.Vector3(20, 4.8, 17),
+                new THREE.Vector3(20, 4.8, 6)
+            ];
+        }
+
+        /* ==========================================================================
+           MANHATTAN VS EUCLIDEAN ROUTING ENGINE
+           ========================================================================== */
+        let currentPathLine = null;
+
+        function calculateManhattanDistance(p1, p2) {
+            // Distance = |x2 - x1| + |y2 - y1| + |z2| + |z1| as per wms-location-architect.md
+            const dx = Math.abs(p2.x - p1.x);
+            const dy = Math.abs(p2.y - p1.y);
+            const dz = Math.abs(p2.z) + Math.abs(p1.z);
+            return dx + dy + dz;
+        }
+
+        function calculateEuclideanDistance(p1, p2) {
+            // Euclidean = sqrt((x2 - x1)^2 + (y2 - y1)^2 + (|z2| + |z1|)^2)
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const dz = Math.abs(p2.z) + Math.abs(p1.z);
+            return Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+
+        function drawManhattanPath(startPos, endPos) {
+            if (currentPathLine) {
+                scene.remove(currentPathLine);
+            }
+
+            // Path constrained to orthogonal warehouse corridors
+            const points = [
+                new THREE.Vector3(startPos.x, 0.08, startPos.z),
+                new THREE.Vector3(startPos.x, 0.08, endPos.z), // Orthogonal elbow turn
+                new THREE.Vector3(endPos.x, 0.08, endPos.z),
+                new THREE.Vector3(endPos.x, endPos.y, endPos.z)
+            ];
+
+            const pathGeo = new THREE.BufferGeometry().setFromPoints(points);
+            const pathMat = new THREE.LineDashedMaterial({
+                color: 0xf59e0b,
+                dashSize: 0.8,
+                gapSize: 0.4,
+                linewidth: 3
+            });
+            currentPathLine = new THREE.Line(pathGeo, pathMat);
+            currentPathLine.computeLineDistances();
+            scene.add(currentPathLine);
+        }
+
+        /* ==========================================================================
+           RAYCASTING & INTERACTIVE 3D INSPECTOR
+           ========================================================================== */
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('pointerdown', (e) => {
+            // Ignore UI clicks
+            if (e.target.closest('.top-navbar') || e.target.closest('.camera-controls-bar') ||
+                e.target.closest('.zone-pill-nav') || e.target.closest('.wms-inspector-card') ||
+                e.target.closest('.bottom-dock') || e.target.closest('.wms-terminal-card') ||
+                e.target.closest('.modal-backdrop')) {
+                return;
+            }
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            const cam = activeCamera;
+            raycaster.setFromCamera(mouse, cam);
+            const intersects = raycaster.intersectObjects(palletMeshList, true);
+
+            if (intersects.length > 0) {
+                // Find root pallet group
+                let obj = intersects[0].object;
+                while (obj.parent && !obj.userData.wmsItem) {
+                    obj = obj.parent;
+                }
+                if (obj.userData && obj.userData.wmsItem) {
+                    selectLocation(obj.userData.wmsItem);
+                }
+            }
+        });
+
+        function selectLocation(wmsItem) {
+            selectedLocation = wmsItem;
+            const card = document.getElementById('inspector-card');
+            card.classList.remove('collapsed');
+
+            document.getElementById('insp-code').innerText = wmsItem.code;
+            const fsmEl = document.getElementById('insp-fsm');
+            fsmEl.innerText = wmsItem.state;
+            fsmEl.className = `status-pill-badge status-${wmsItem.state}`;
+
+            document.getElementById('insp-prod-name').innerText = wmsItem.productName || 'Producto General WMS';
+            document.getElementById('insp-prod-cat').innerText = wmsItem.category || 'Categoría Estándar';
+
+            document.getElementById('insp-zone').innerText = ZONES[wmsItem.zone] ? ZONES[wmsItem.zone].name : wmsItem.zone;
+            document.getElementById('insp-aisle-rack').innerText = `${wmsItem.aisle} • ${wmsItem.rack}`;
+            document.getElementById('insp-level').innerText = `Nivel 0${wmsItem.level} ${wmsItem.isGoldenZone ? '★ (Golden Zone)' : ''}`;
+            document.getElementById('insp-coords').innerText = `[${wmsItem.coords.x}, ${wmsItem.coords.y}, ${wmsItem.coords.z}]`;
+            document.getElementById('insp-sku').innerText = wmsItem.sku;
+            document.getElementById('insp-lote').innerText = `${wmsItem.lote || 'LOT-2026'} • ${wmsItem.caducidad || 'Vigente'}`;
+            document.getElementById('insp-weight').innerText = wmsItem.weight || '500 kg';
+            document.getElementById('insp-vol').innerText = wmsItem.volume || '1.20 m³';
+            document.getElementById('insp-stock').innerText = `${wmsItem.availableQty} / ${wmsItem.totalQty} u.`;
+            document.getElementById('insp-pedimento').innerText = wmsItem.pedimento;
+            document.getElementById('insp-rfid').innerText = wmsItem.rfidType;
+
+            // Compute Manhattan distance to Outbound Dock EXP (-29, 0, 11)
+            const dockExpPos = { x: -29, y: 0, z: 11 };
+            const manDist = calculateManhattanDistance(wmsItem.coords, dockExpPos).toFixed(1);
+            const eucDist = calculateEuclideanDistance(wmsItem.coords, dockExpPos).toFixed(1);
+            document.getElementById('insp-dist').innerText = `${manDist} m (Eucl: ${eucDist}m)`;
+
+            // Draw visual Manhattan route to this location from picker Mateo
+            drawManhattanPath(workerMateo.position, wmsItem.coords);
+
+            // Log selection
+            addTerminalLog(`[WMS-POS] Ubicación: ${wmsItem.code} | ${wmsItem.productName} | Lote: ${wmsItem.lote} | RSSI: ${wmsItem.rfidRssi}`);
+        }
+
+        function closeInspector() {
+            document.getElementById('inspector-card').classList.add('collapsed');
+            if (currentPathLine) {
+                scene.remove(currentPathLine);
+                currentPathLine = null;
+            }
+        }
+
+        /* ==========================================================================
+           OPERATIONAL TRIGGERS & SIMULATION PROTOCOLS
+           ========================================================================== */
+        // 1. Customs Release (GTS Webhook Simulation)
+        function triggerBatchCustomsRelease() {
+            const bondedItems = inventoryDatabase.filter(i => i.state === FSM_STATES.RETENIDO_ADUANA);
+            if (bondedItems.length === 0) {
+                addTerminalLog('[GTS-API] No hay mercancías en Zona Restringida pendientes de levante aduanero.');
+                return;
+            }
+
+            // Release 3 items in batch
+            const batch = bondedItems.slice(0, 3);
+            batch.forEach(item => {
+                item.state = FSM_STATES.DISPONIBLE;
+                item.availableQty = item.totalQty;
+                if (item.statusRing) {
+                    item.statusRing.material.color.setHex(0x10b981);
+                }
+                addTerminalLog(`[GTS-LEVANTE] Pedimento ${item.pedimento} APROBADO por Autoridad Aduanera. Posición ${item.code} transiciona a DISPONIBLE (Disp = ${item.availableQty}u).`);
+            });
+
+            updateGlobalCounters();
+            if (selectedLocation) selectLocation(selectedLocation);
+        }
+
+        function executeCustomsReleaseSelected() {
+            if (!selectedLocation) return;
+            if (selectedLocation.state !== FSM_STATES.RETENIDO_ADUANA) {
+                addTerminalLog(`[AVISO] La posición ${selectedLocation.code} no está bajo retención aduanera.`);
+                return;
+            }
+            selectedLocation.state = FSM_STATES.DISPONIBLE;
+            selectedLocation.availableQty = selectedLocation.totalQty;
+            if (selectedLocation.statusRing) {
+                selectedLocation.statusRing.material.color.setHex(0x10b981);
+            }
+            addTerminalLog(`[GTS-RELEASE] Levante aduanero puntual concedido para ${selectedLocation.code}. Qty Disponible: ${selectedLocation.availableQty}u.`);
+            selectLocation(selectedLocation);
+            updateGlobalCounters();
+        }
+
+        // 2. Quarantine Injection (Discrepancy / Quality Alert)
+        function injectDiscrepancy() {
+            const availItems = inventoryDatabase.filter(i => i.state === FSM_STATES.DISPONIBLE);
+            if (availItems.length === 0) return;
+
+            const target = availItems[Math.floor(Math.random() * availItems.length)];
+            target.state = FSM_STATES.CUARENTENA;
+            target.availableQty = 0;
+            if (target.statusRing) {
+                target.statusRing.material.color.setHex(0xef4444);
+            }
+
+            addTerminalLog(`[ALERTA-DISCREPANCIA] IA/RFID detectó anomalía de conteo en ${target.code}. Flag CUARENTENA activado. Cycle Count Trigger generado para Sofía.`);
+            selectLocation(target);
+            updateGlobalCounters();
+        }
+
+        function sendSelectedToQuarantine() {
+            if (!selectedLocation) return;
+            selectedLocation.state = FSM_STATES.CUARENTENA;
+            selectedLocation.availableQty = 0;
+            if (selectedLocation.statusRing) {
+                selectedLocation.statusRing.material.color.setHex(0xef4444);
+            }
+            addTerminalLog(`[CUARENTENA] Posición ${selectedLocation.code} transferida a régimen de segregación por control de calidad.`);
+            selectLocation(selectedLocation);
+            updateGlobalCounters();
+        }
+
+        // 3. Wave Processing & Picking Route (Golden Zone Focus)
+        function triggerPickingWave() {
+            const goldenItems = inventoryDatabase.filter(i => i.isGoldenZone && i.state === FSM_STATES.DISPONIBLE);
+            if (goldenItems.length === 0) {
+                addTerminalLog('[WAVE-WMS] No hay inventario disponible en Golden Zone para procesar la ola.');
+                return;
+            }
+
+            // Pick farthest first to nearest (as per wms-location-architect.md)
+            goldenItems.sort((a, b) => b.coords.x - a.coords.x);
+            const target = goldenItems[0];
+            target.state = FSM_STATES.RESERVADO;
+            target.reservedQty = 12;
+            target.availableQty -= 12;
+            if (target.statusRing) {
+                target.statusRing.material.color.setHex(0x8b5cf6);
+            }
+
+            drawManhattanPath(workerMateo.position, target.coords);
+            addTerminalLog(`[OLA-PICKING] Ola generada (Wave #104). Mateo enrutado a ${target.code} (Golden Zone Nivel 0${target.level}). Secuencia: Ubicación más distante -> Más cercana.`);
+            selectLocation(target);
+            updateGlobalCounters();
+        }
+
+        function routePickerToSelected() {
+            if (!selectedLocation) return;
+            drawManhattanPath(workerMateo.position, selectedLocation.coords);
+            addTerminalLog(`[RUTA-MANHATTAN] Ruta ortogonal trazada hacia ${selectedLocation.code}. Distancia: ${calculateManhattanDistance(workerMateo.position, selectedLocation.coords).toFixed(1)}m.`);
+        }
+
+        // 4. Drone Autonomous Inspection Flight
+        let isDroneAuditing = false;
+        function triggerDroneAudit() {
+            isDroneAuditing = true;
+            addTerminalLog('[AEROSCAN-IA] Dron despegando. Recorrido a lo largo del pasillo Y a altitud Z constante. Inferencia YOLO v8 activa.');
+            setCameraMode('drone');
+        }
+
+        // 5. Toggle RFID Beam Visuals
+        function toggleRfidBeams() {
+            showRfidBeams = !showRfidBeams;
+            rfidAntennaVisuals.forEach(mesh => {
+                mesh.visible = showRfidBeams;
+            });
+            const btn = document.getElementById('btn-rfid-beams');
+            btn.style.color = showRfidBeams ? '#fff' : 'var(--text-muted)';
+            addTerminalLog(`[RFID-CONFIG] Visualización de propagación electromagnética (30° lineal / 75° circular): ${showRfidBeams ? 'ACTIVADA' : 'OCULTA'}.`);
+        }
+
+        // 6. Pause / Resume Simulation
+        function toggleSimulationPause() {
+            isSimulationPaused = !isSimulationPaused;
+            const btn = document.getElementById('btn-pause-play');
+            btn.innerHTML = isSimulationPaused
+                ? `<svg style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Reanudar`
+                : `<svg style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> Pausar`;
+            addTerminalLog(`[SIMULADOR] Simulación operativa ${isSimulationPaused ? 'PAUSADA' : 'EN EJECUCIÓN'}.`);
+        }
+
+        function updateGlobalCounters() {
+            const countDisp = inventoryDatabase.filter(i => i.state === FSM_STATES.DISPONIBLE).length;
+            const countRet = inventoryDatabase.filter(i => i.state === FSM_STATES.RETENIDO_ADUANA).length;
+            const countQua = inventoryDatabase.filter(i => i.state === FSM_STATES.CUARENTENA).length;
+
+            document.getElementById('kpi-disponible').innerText = `${countDisp} Pallets`;
+            document.getElementById('kpi-retenido').innerText = `${countRet} Pallets`;
+            document.getElementById('kpi-cuarentena').innerText = `${countQua} Pallets`;
+        }
+
+        function addTerminalLog(message) {
+            const term = document.getElementById('terminal-body');
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+
+            let coloredMsg = message;
+            if (message.includes('[GTS')) coloredMsg = `<span class="tag-gts">${message}</span>`;
+            else if (message.includes('[RFID')) coloredMsg = `<span class="tag-rfid">${message}</span>`;
+            else if (message.includes('[AEROSCAN') || message.includes('[YOLO')) coloredMsg = `<span class="tag-yolo">${message}</span>`;
+            else if (message.includes('[ALERTA') || message.includes('[CUARENTENA')) coloredMsg = `<span class="tag-alert">${message}</span>`;
+            else if (message.includes('[WMS')) coloredMsg = `<span class="tag-wms">${message}</span>`;
+
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${timeStr}]</span> ${coloredMsg}`;
+            term.prepend(entry);
+        }
+
+        /* ==========================================================================
+           CAMERA MODES & ZONE FOCUSING SYSTEM
+           ========================================================================== */
+        function setCameraMode(mode) {
+            activeCameraMode = mode;
+            document.querySelectorAll('.cam-btn').forEach(b => b.classList.remove('active'));
+            const hud = document.getElementById('drone-hud');
+            hud.classList.remove('active');
+
+            if (mode === 'iso') {
+                document.getElementById('btn-cam-iso').classList.add('active');
+                activeCamera = orthoCamera;
+                orthoCamera.position.set(isoDistance, isoDistance, isoDistance);
+                orthoCamera.lookAt(0, 2, 0);
+                orthoControls.target.set(0, 2, 0);
+            } else if (mode === 'free') {
+                document.getElementById('btn-cam-free').classList.add('active');
+                activeCamera = perspCamera;
+                perspCamera.position.set(45, 38, 45);
+                controls.target.set(0, 0, 0);
+            } else if (mode === 'top') {
+                document.getElementById('btn-cam-top').classList.add('active');
+                activeCamera = orthoCamera;
+                orthoCamera.position.set(0, 90, 0);
+                orthoCamera.lookAt(0, 0, 0);
+                orthoControls.target.set(0, 0, 0);
+            } else if (mode === 'drone') {
+                document.getElementById('btn-cam-drone').classList.add('active');
+                activeCamera = droneCamera;
+                hud.classList.add('active');
+            }
+        }
+
+        function focusZone(zoneKey) {
+            document.querySelectorAll('.zone-pill').forEach(p => p.classList.remove('active'));
+            if (event && event.target && event.target.classList) {
+                event.target.classList.add('active');
+            }
+
+            const targets = {
+                'ALL': { x: 0, y: 2, z: 0, zoom: 48 },
+                'REC': { x: -28, y: 2, z: -14, zoom: 28 },
+                'RES': { x: -9,  y: 2, z: -15, zoom: 30 },
+                'FUEL': { x: -30, y: 3, z: -1.5, zoom: 24 },
+                'ESTIBA': { x: -10, y: 2, z: 0, zoom: 36 },
+                'CONV': { x: 27, y: 2, z: 7, zoom: 28 },
+                'PSA': { x: -9, y: 2, z: -15, zoom: 28 },
+                'PSB': { x: 2, y: 2, z: -14, zoom: 28 },
+                'PSC': { x: 13, y: 3, z: -14, zoom: 30 },
+                'PSD': { x: 8, y: 2, z: 11, zoom: 28 },
+                'PSE': { x: 23, y: 2, z: 0, zoom: 30 },
+                'NMP': { x: 10, y: 3, z: -14, zoom: 32 },
+                'FST': { x: 10, y: 3, z: 11, zoom: 30 },
+                'QUA': { x: -9, y: 2, z: 11, zoom: 26 },
+                'PAC': { x: 28, y: 2, z: 0, zoom: 28 },
+                'EXP': { x: -28, y: 2, z: 11, zoom: 28 }
+            };
+
+            const t = targets[zoneKey] || targets['ALL'];
+
+            if (activeCamera === orthoCamera) {
+                orthoControls.target.set(t.x, t.y, t.z);
+                orthoCamera.position.set(t.x + isoDistance, t.y + isoDistance, t.z + isoDistance);
+            } else {
+                controls.target.set(t.x, t.y, t.z);
+                perspCamera.position.set(t.x + 25, t.y + 20, t.z + 25);
+            }
+
+            const zoneName = ZONES[zoneKey] ? ZONES[zoneKey].name : zoneKey;
+            addTerminalLog(`[CÁMARA] Enfoque centrado en: ${zoneKey === 'ALL' ? 'Vista General de Bodega' : zoneName}.`);
+        }
+
+        function toggleHelpModal(show) {
+            const modal = document.getElementById('help-modal');
+            if (show) modal.classList.add('show');
+            else modal.classList.remove('show');
+        }
+
+        /* ==========================================================================
+           ANIMATION & SIMULATION LOOP
+           ========================================================================== */
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const elapsed = clock.getElapsedTime();
+
+            if (!isSimulationPaused) {
+                // 1. Animate Dron AeroScan AI-4
+                if (droneAeroScan) {
+                    droneAeroScan.userData.rotors.forEach(r => {
+                        r.rotation.y += 0.45;
+                    });
+
+                    const wps = droneAeroScan.userData.patrolWaypoints;
+                    let currIdx = droneAeroScan.userData.currentWpIndex;
+                    const targetWp = wps[currIdx];
+
+                    const dir = new THREE.Vector3().subVectors(targetWp, droneAeroScan.position);
+                    const dist = dir.length();
+
+                    if (dist < 0.4) {
+                        droneAeroScan.userData.currentWpIndex = (currIdx + 1) % wps.length;
+                    } else {
+                        dir.normalize();
+                        droneAeroScan.position.addScaledVector(dir, delta * 3.2);
+                        droneAeroScan.rotation.z = -dir.x * 0.15;
+                        droneAeroScan.rotation.x = dir.z * 0.15;
+                    }
+
+                    droneAeroScan.position.y += Math.sin(elapsed * 4) * 0.003;
+
+                    droneCamera.position.copy(droneAeroScan.position);
+                    droneCamera.position.y -= 0.1;
+                    const forwardTarget = new THREE.Vector3().copy(droneAeroScan.position).add(new THREE.Vector3(dir.x * 5, -2, dir.z * 5));
+                    droneCamera.lookAt(forwardTarget);
+
+                    if (activeCameraMode === 'drone') {
+                        document.getElementById('hud-alt').innerText = `${droneAeroScan.position.y.toFixed(2)} m`;
+                        document.getElementById('hud-pos-y').innerText = `${droneAeroScan.position.z.toFixed(1)} m`;
+                    }
+                }
+
+                // 2. Animate Carlos (Inbound pacing between truck and intake)
+                if (workerCarlos) {
+                    workerCarlos.position.x = -25 + Math.sin(elapsed * 0.8) * 2.5;
+                    workerCarlos.rotation.y = Math.cos(elapsed * 0.8) > 0 ? Math.PI / 2 : -Math.PI / 2;
+                    animateLegs(workerCarlos, elapsed * 5);
+                }
+
+                // 3. Animate Forklift Miguel (Driving and lifting forks)
+                if (forkliftMiguel) {
+                    forkliftMiguel.position.z = -5 + Math.sin(elapsed * 0.5) * 4.0;
+                    forkliftMiguel.rotation.y = Math.cos(elapsed * 0.5) > 0 ? 0 : Math.PI;
+
+                    const forkC = forkliftMiguel.userData.forkCarriage;
+                    forkC.position.y = 0.4 + (Math.sin(elapsed * 0.7) + 1) * 1.1;
+                }
+
+                // 4. Animate Mateo (Order Picker walking in Golden Zone)
+                if (workerMateo) {
+                    workerMateo.position.x = 8 + Math.sin(elapsed * 0.9) * 4.5;
+                    workerMateo.rotation.y = Math.cos(elapsed * 0.9) > 0 ? Math.PI / 2 : -Math.PI / 2;
+                    animateLegs(workerMateo, elapsed * 6);
+                }
+
+                // 5. Animate Andrés (Packing consolidation turns)
+                if (workerAndres) {
+                    workerAndres.rotation.y = Math.sin(elapsed * 1.2) * 0.6;
+                }
+
+                // 6. Animate Motorized Conveyor System (boxes moving to workers)
+                updateConveyorAnimation(delta);
+            }
+
+            // Update camera controls
+            if (activeCamera === orthoCamera) {
+                orthoControls.update();
+            } else if (activeCamera === perspCamera) {
+                controls.update();
+            }
+
+            renderer.render(scene, activeCamera);
+
+            // Update 3D overlay screen coordinates
+            update3DOverlayLabels();
+        }
+
+        /* ==========================================================================
+           3D IN-SCENE DYNAMIC OVERLAY LABELS & PINS
+           ========================================================================== */
+        const zoneLabelsData = [
+            { name: 'MUELLE RECEPCIÓN (REC)', x: -29, y: 3.8, z: -14, cls: 'rec' },
+            { name: 'DEPÓSITO ADUANERO (RES)', x: -9, y: 4.8, z: -15, cls: 'res' },
+            { name: 'ESTACIÓN DE GASOLINA & DIÉSEL', x: -30, y: 5.8, z: -1.5, cls: 'fuel' },
+            { name: 'PASILLO B • CONSTRUCCIÓN', x: 2, y: 7.2, z: -14, cls: 'psb' },
+            { name: 'PASILLO C • HIGH-BAY (Z≥6m)', x: 13, y: 7.8, z: -14, cls: 'rec' },
+            { name: 'GOLDEN ZONE PICKING (PSD)', x: 8, y: 6.2, z: 11, cls: 'fst' },
+            { name: 'CINTA TRANSPORTADORA (PSE)', x: 27, y: 2.2, z: 7, cls: 'conv' },
+            { name: 'CUARENTENA & CALIDAD (QUA)', x: -9, y: 4.2, z: 11, cls: 'qua' },
+            { name: 'CONSOLIDACIÓN & PACKING (PAC)', x: 29, y: 3.5, z: 0, cls: 'pac' },
+            { name: 'MUELLE DESPACHO (EXP)', x: -29, y: 3.8, z: 11, cls: 'exp' }
+        ];
+
+        let createdZonePins = [];
+        let createdCharPins = [];
+
+        function setup3DOverlayLabels() {
+            const container = document.getElementById('labels-container');
+            container.innerHTML = '';
+            createdZonePins = [];
+            createdCharPins = [];
+
+            zoneLabelsData.forEach(item => {
+                const pin = document.createElement('div');
+                pin.className = 'zone-pin-3d';
+                pin.innerHTML = `
+                    <div class="pin-pill ${item.cls}">
+                        <div class="pin-dot"></div>
+                        <span>${item.name}</span>
+                    </div>
+                    <div class="pin-stem"></div>
+                `;
+                container.appendChild(pin);
+                createdZonePins.push({ el: pin, pos: new THREE.Vector3(item.x, item.y, item.z) });
+            });
+
+            const charData = [
+                { getTarget: () => workerCarlos, name: 'Carlos (Recepción ASN)', offset: 2.3 },
+                { getTarget: () => workerElena, name: 'Dra. Elena (Aduana GTS)', offset: 2.3 },
+                { getTarget: () => forkliftMiguel, name: 'Miguel (Montacargas Z≥6m)', offset: 3.2 },
+                { getTarget: () => workerMateo, name: 'Mateo (Picker Golden Zone)', offset: 2.3 },
+                { getTarget: () => workerSofia, name: 'Sofía (Auditora Cuarentena)', offset: 2.3 },
+                { getTarget: () => workerAndres, name: 'Andrés (Consolidación PAC)', offset: 2.3 },
+                { getTarget: () => droneAeroScan, name: 'AeroScan AI-4 (Dron YOLO)', offset: 0.95 }
+            ];
+
+            charData.forEach(c => {
+                const badge = document.createElement('div');
+                badge.className = 'char-pin-3d';
+                badge.innerHTML = `<span class="char-dot"></span><span>${c.name}</span>`;
+                container.appendChild(badge);
+                createdCharPins.push({ el: badge, getTarget: c.getTarget, offset: c.offset });
+            });
+        }
+
+        const screenVec = new THREE.Vector3();
+        function update3DOverlayLabels() {
+            const container = document.getElementById('labels-container');
+            if (activeCameraMode === 'drone') {
+                container.style.display = 'none';
+                return;
+            }
+            container.style.display = 'block';
+
+            const halfW = window.innerWidth / 2;
+            const halfH = window.innerHeight / 2;
+
+            createdZonePins.forEach(item => {
+                screenVec.copy(item.pos);
+                screenVec.project(activeCamera);
+                if (screenVec.z > 1) {
+                    item.el.style.display = 'none';
+                    return;
+                }
+                item.el.style.display = 'flex';
+                const sx = (screenVec.x * halfW) + halfW;
+                const sy = (-(screenVec.y * halfH)) + halfH;
+                item.el.style.left = `${sx}px`;
+                item.el.style.top = `${sy}px`;
+            });
+
+            createdCharPins.forEach(item => {
+                const targetObj = item.getTarget();
+                if (!targetObj) return;
+                screenVec.copy(targetObj.position);
+                screenVec.y += item.offset;
+                screenVec.project(activeCamera);
+                if (screenVec.z > 1) {
+                    item.el.style.display = 'none';
+                    return;
+                }
+                item.el.style.display = 'flex';
+                const sx = (screenVec.x * halfW) + halfW;
+                const sy = (-(screenVec.y * halfH)) + halfH;
+                item.el.style.left = `${sx}px`;
+                item.el.style.top = `${sy}px`;
+            });
+        }
+
+        function animateLegs(workerMesh, speed) {
+            const ud = workerMesh.userData;
+            if (!ud.leftLeg || !ud.rightLeg) return;
+            const angle = Math.sin(speed) * 0.45;
+            ud.leftLeg.rotation.x = angle;
+            ud.rightLeg.rotation.x = -angle;
+            ud.leftArm.rotation.x = -angle * 0.6;
+            ud.rightArm.rotation.x = angle * 0.6;
+        }
+
+        /* Window resize handling */
+        window.addEventListener('resize', () => {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const asp = w / h;
+
+            // Update Ortho
+            orthoCamera.left = (-frustumSize * asp) / 2;
+            orthoCamera.right = (frustumSize * asp) / 2;
+            orthoCamera.top = frustumSize / 2;
+            orthoCamera.bottom = -frustumSize / 2;
+            orthoCamera.updateProjectionMatrix();
+
+            // Update Persp & Drone
+            perspCamera.aspect = asp;
+            perspCamera.updateProjectionMatrix();
+            droneCamera.aspect = asp;
+            droneCamera.updateProjectionMatrix();
+
+            renderer.setSize(w, h);
+        });
+
+        /* ==========================================================================
+           INITIALIZATION EXECUTION
+           ========================================================================== */
+        window.addEventListener('DOMContentLoaded', () => {
+            createIndustrialFloor();
+            createZoneMarkings();
+            buildWarehouseRacks();
+            buildDockFacilities();
+            initializeOperationalAgents();
+
+            setup3DOverlayLabels();
+            updateGlobalCounters();
+
+            // Welcome trace logs
+            addTerminalLog('[SISTEMA] Motor 3D inicializado con éxito. Vista Isométrica 2D activa.');
+            addTerminalLog('[WMS] Jerarquía cargada: ZONA-PASILLO-RACK-NIVEL-POSICION.');
+            addTerminalLog('[COMPLIANCE] Reglas de depósito aduanero validadas: RETENIDO_ADUANA -> DISPONIBLE.');
+            addTerminalLog('[RFID-MIDDLEWARE] Antenas UHF configuradas: 30° lineal (Z>=6m) / 75° circular (Z<6m).');
+
+            animate();
+        });
+    </script>
+</body>
+</html>
